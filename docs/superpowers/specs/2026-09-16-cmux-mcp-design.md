@@ -644,7 +644,7 @@ class CmuxValidationError(CmuxError):
 
 ## Configuration
 
-`CmuxMCPConfig` extends `pydantic_settings.BaseSettings` directly with explicit `SettingsConfigDict`. Per cross-llm-mcp decision log row 24-28, `OneiricMCPConfig(BaseModel)` silently ignores `SettingsConfigDict` overrides; using `BaseSettings` directly is the verified-working pattern.
+`CmuxMCPConfig` extends `pydantic_settings.BaseSettings` directly with explicit `SettingsConfigDict`. Per chat-bridge-mcp decision log row 24-28, `OneiricMCPConfig(BaseModel)` silently ignores `SettingsConfigDict` overrides; using `BaseSettings` directly is the verified-working pattern.
 
 ```python
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -801,7 +801,7 @@ async def tool_handler(...):
         return result
 ```
 
-`try/except/else` placement: `record_cycle()` at top, `record_success()` in the `else` block (runs only when no exception fired), `record_error()` in the `except` block. The `else` block is critical — it ensures a `record_success()` failure cannot be misclassified as a tool error, and vice versa. Pattern matches cross-llm-mcp §4a.
+`try/except/else` placement: `record_cycle()` at top, `record_success()` in the `else` block (runs only when no exception fired), `record_error()` in the `except` block. The `else` block is critical — it ensures a `record_success()` failure cannot be misclassified as a tool error, and vice versa. Pattern matches chat-bridge-mcp §4a.
 
 ## Subprocess management
 
@@ -1066,7 +1066,7 @@ class CmuxMCPServer(BaseOneiricServerMixin):
 
 ### `_tools.py` — registration pattern (the break-the-cycle mechanism)
 
-The cmux-mcp server builds its `FastMCP` instance inside `__init__` (per-instance, not module-level singleton). This breaks the cross-llm-mcp singleton pattern, so tools cannot use `@mcp.tool()` decorators at module load time. Instead, tools are plain functions registered programmatically in `startup()`:
+The cmux-mcp server builds its `FastMCP` instance inside `__init__` (per-instance, not module-level singleton). This breaks the chat-bridge-mcp singleton pattern, so tools cannot use `@mcp.tool()` decorators at module load time. Instead, tools are plain functions registered programmatically in `startup()`:
 
 ```python
 # cmux_mcp/_tools.py
@@ -1186,7 +1186,7 @@ None at design freeze. Items deferred to v1.1+ are listed in **Scope → Out of 
 - `jasonraz/cmux-browser-mcp`: precedent CLI-based cmux MCP server
 - `manaflow-ai/cmux-skills`: companion skill repo
 - WWW catalog pattern: `/Users/les/Projects/www-mcp-servers/README.md`
-- Cross-llm-mcp sibling spec: `/Users/les/Projects/cross-llm-mcp/docs/superpowers/specs/2026-09-16-cross-llm-mcp-design.md`
+- Cross-llm-mcp sibling spec: `/Users/les/Projects/chat-bridge-mcp/docs/superpowers/specs/2026-09-16-chat-bridge-mcp-design.md`
 - Bodai MCP wiring discipline: `/Users/les/Projects/mahavishnu/.claude/decisions/mcp-backend-wiring-discipline.md`
 
 ## Decision log
@@ -1195,10 +1195,10 @@ None at design freeze. Items deferred to v1.1+ are listed in **Scope → Out of 
 2. **Default port 3061** — next free slot in WWW catalog after css-mcp (3050), excalidraw (3032), langsmith (3048), archive-org (3054), scapy (3056). Port collision-checked against existing fleet.
 3. **Hybrid transport (socket + CLI)** — socket-direct for documented `workspace.*`/`surface.*`/`pane.*`/`notification.*`/`system.*` (low latency, multiplexed); CLI subprocess for browser (only documented path; cmux's WebKit browser does not expose a remote inspector).
 4. **`CmuxSocketTransport` + `CmuxCliTransport` as two Protocols** — not unified `CmuxTransport`. Failure modes, retry semantics, observability differ; one abstraction would lose critical distinctions.
-5. **`BaseSettings` direct subclass for config** — per cross-llm-mcp decision log row 24-28. `OneiricMCPConfig(BaseModel)` silently ignores `SettingsConfigDict` overrides; `BaseSettings` with explicit `SettingsConfigDict(env_prefix=…, env_file=…, extra=…)` is the verified-working pattern.
-6. **`cmux_` prefix on all 12 tools** — prevents collision with sibling servers' `notify`, `identify`, `send_keys`. Catalog convention from cross-llm-mcp's naming pattern.
+5. **`BaseSettings` direct subclass for config** — per chat-bridge-mcp decision log row 24-28. `OneiricMCPConfig(BaseModel)` silently ignores `SettingsConfigDict` overrides; `BaseSettings` with explicit `SettingsConfigDict(env_prefix=…, env_file=…, extra=…)` is the verified-working pattern.
+6. **`cmux_` prefix on all 12 tools** — prevents collision with sibling servers' `notify`, `identify`, `send_keys`. Catalog convention from chat-bridge-mcp's naming pattern.
 7. **Mock-mode auto-flip on non-darwin WITH unmissable WARN banner** — resolves the contradiction (line 25 vs line 27 vs line 297 of original spec). Non-macOS is a development convenience, not a production deployment.
-8. **DEFAULT_PORT as module constant in `__init__.py`** — single source of truth for port discovery (per cross-llm-mcp decision log row 25). Required by Bodai MCP wiring discipline.
+8. **DEFAULT_PORT as module constant in `__init__.py`** — single source of truth for port discovery (per chat-bridge-mcp decision log row 25). Required by Bodai MCP wiring discipline.
 9. **`register_http_health_route` with per-tool + per-transport `HealthFeedState`** — per Bodai MCP backend wiring discipline. Without this, `/health` lies about feed state (per `mcp-surface-health-illusion` memory).
 10. **Named tests as cross-reference anchors** — listed in § "Named tests" above. Each is a test that pins a specific spec claim. Cross-references from the spec body land on these names.
 11. **Lifecycle detection on SIGHUP (foreground only)** — `start --bg` explicitly drops the per-session guarantee. Documented in § "Per-session termination".
@@ -1209,7 +1209,7 @@ None at design freeze. Items deferred to v1.1+ are listed in **Scope → Out of 
 16. **`outputSchema` + `structuredContent` on every tool** — per MCP 2025-06-18 spec. Avoids stringly-typed double-parse.
 17. **Streamable HTTP pinned to MCP 2025-06-18** — supports annotations, `outputSchema`, `structuredContent`. Resumability deferred.
 18. **Per-instance `FastMCP` instead of module-level singleton** (round-3 fix, M-4) — cmux-mcp creates `self.mcp = FastMCP(...)` in `__init__` because per-session config and async-constructed transports need lifecycle control. This forces programmatic tool registration in `_tools.py.register_tools()` instead of `@mcp.tool()` decorators at module load. Trade-off: explicit lifecycle control over decorator ergonomics. Cross-llm-mcp uses the singleton pattern (compatible with its tool signature shape).
-19. **`/health` `extra_components` carries the full per-tool feed list** (round-3 fix) — cross-llm-mcp passes `extra_components=[]` and exposes peer health via a separate `get_peer_health` tool. cmux-mcp puts per-tool feed state directly in `/health` because the 12-tool surface is denser than cross-llm-mcp's 6-tool surface; a separate `get_tool_health()` tool would be overhead. Both are Bodai-discipline-compliant.
+19. **`/health` `extra_components` carries the full per-tool feed list** (round-3 fix) — chat-bridge-mcp passes `extra_components=[]` and exposes peer health via a separate `get_peer_health` tool. cmux-mcp puts per-tool feed state directly in `/health` because the 12-tool surface is denser than chat-bridge-mcp's 6-tool surface; a separate `get_tool_health()` tool would be overhead. Both are Bodai-discipline-compliant.
 20. **Truncation is a soft marker, not an error** (round-3 fix, N5) — `truncated: bool` on the output model signals clipping; `is_error` stays `False`. The previously-listed `response_truncated` error code is removed. Clients re-query with smaller scope on truncation.
 21. **`dangerousHint` is not used** (round-3 fix, N3) — MCP 2025-03-26 / 2025-06-18 only define 4 standard annotations; `dangerousHint` would be silently ignored by FastMCP. `destructiveHint: true` on `browser_evaluate` covers the destructive nature. The arbitrary-JS trust model is documented in tool description + README.
 22. **60s warm-up before "tool never called" triggers degraded** (round-3 fix, M-8) — `HealthFeedState.started_at` + `health_warmup_seconds` config. Avoids false-degraded during startup. Mock transport has its own component so dashboards can alert on `mock_transport.cycles_total > 0` in production.
