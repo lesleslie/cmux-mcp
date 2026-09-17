@@ -23,11 +23,11 @@ Several standalone cmux MCP servers exist in the wild (`jasonraz/cmux-browser-mc
 
 - 12 MCP tools (5 socket + 7 browser CLI)
 - Streamable HTTP transport on port 3061
-- macOS-only runtime; non-macOS hosts fail-fast with `unsupported_platform` unless `CMUX_MCP_MOCK=1`
+- macOS-only runtime; non-macOS hosts auto-flip to mock mode via config validator (with unmissable WARN banner unless `CMUX_MCP_MOCK_ACKNOWLEDGED=1` is set)
 - Mock-mode test fixture for CI on Linux (explicit opt-in via env var)
 - Lifecycle CLI via `mcp-common` (start, stop, restart, status, health, version, doctor)
 - Per-session lifecycle: server exits when cmux terminal closes
-- /health endpoint aggregates per-transport and per-tool feed state (returns 503 on degraded)
+- /health endpoint aggregates per-transport and per-tool feed state (returns 503 on degraded after warm-up)
 - BSD 3-Clause license
 
 ### Out of v1 (deferred to v1.1+)
@@ -196,6 +196,66 @@ class BrowserConsoleResult(BaseModel):
     messages: list[ConsoleMessage]
     errors: list[BrowserError]
     truncated: bool = False
+    partial_failure: bool = False  # True if one of console list / errors list sub-call failed
+    failed_subcalls: list[Literal["console_list", "errors_list"]] = []
+
+
+# Tool output models — every tool has a typed output so FastMCP's output_schema
+# and MCP 2025-06-18's structuredContent are honored on the success path.
+
+class ListWorkspacesOutput(BaseModel):
+    workspaces: list[Workspace]
+
+
+class ListNotificationsOutput(BaseModel):
+    notifications: list[Notification]
+
+
+class IdentifyOutput(BaseModel):
+    window: str
+    workspace_id: Annotated[str, Field(pattern=r"^workspace:[a-zA-Z0-9_-]+$")]
+    pane_id: Annotated[str, Field(pattern=r"^pane:[a-zA-Z0-9_-]+$")]
+    surface_id: Annotated[str, Field(pattern=SURFACE_ID_PATTERN)]
+    kind: SurfaceKind
+
+
+class SendKeysOutput(BaseModel):
+    ok: Literal[True] = True
+    surface_id: Annotated[str, Field(pattern=SURFACE_ID_PATTERN)]
+
+
+class NotifyOutput(BaseModel):
+    notification_id: Annotated[str, Field(pattern=NOTIFICATION_ID_PATTERN)]
+    created_at: datetime
+
+
+class BrowserNavigateOutput(BaseModel):
+    ok: Literal[True] = True
+    url: HttpUrl
+    snapshot: BrowserSnapshot | None = None
+    truncated: bool = False  # soft signal: response was clipped at max_response_bytes
+
+
+class BrowserEvaluateErrorResult(BaseModel):
+    """Discriminated error shape for non-serializable returns (BrowserError exception OR runtime error string)."""
+    ok: Literal[False] = False
+    result: None = None
+    error: Annotated[str, Field(min_length=1)]  # Either "{message, stack}" JSON string OR plain runtime error string
+    error_kind: Literal["runtime_exception", "not_serializable", "timeout"]
+
+
+class BrowserClickOutput(BaseModel):
+    ok: Literal[True] = True
+    snapshot: BrowserSnapshot | None = None
+
+
+class BrowserTypeOutput(BaseModel):
+    ok: Literal[True] = True
+
+
+class BrowserTabsOutput(BaseModel):
+    """Tabs ordered by tab index ascending (left-to-right in tab bar)."""
+    tabs: list[BrowserTab]
 ```
 
 ### Tool input models
@@ -295,7 +355,7 @@ All 12 tools carry tool annotations (`readOnlyHint`, `destructiveHint`, `idempot
 | `cmux_browser_tabs` | true | false | true | true |
 | `cmux_browser_console` | true | false | true | true |
 
-`browser_evaluate.expression` is annotated `dangerousHint: true` because arbitrary JS can exfiltrate via `fetch` or clobber state; downstream agents that surface cmux-mcp to untrusted callers MUST NOT expose this tool without proxy-side constraints.
+`browser_evaluate` cannot carry a `dangerousHint` because MCP 2025-03-26 / 2025-06-18 only define `readOnlyHint`/`destructiveHint`/`idempotentHint`/`openWorldHint`. Its `destructiveHint: true` (in the matrix above) covers the destructive nature. The arbitrary-JS risk is documented in tool description and README as a trust-model note, not an annotation.
 
 ### Naming convention
 
@@ -312,7 +372,21 @@ All 12 tools carry the `cmux_` prefix to prevent collision with other MCP server
 
 ### Error envelope (all 12 tools)
 
-Every tool returns `CallToolResult(content=[TextContent(text=...)], is_error=False)` on success, or `CallToolResult(content=[TextContent(text=...)], is_error=True, structured_content={...})` on failure. The structured error envelope:
+Every tool returns one of:
+
+**Success path** — typed via FastMCP's `@mcp.tool(output_schema=OutputModel)`:
+
+```python
+CallToolResult(
+    content=[TextContent(text=json.dumps(output_model.model_dump(mode="json")))],
+    structured_content=output_model.model_dump(mode="json"),  # honors MCP 2025-06-18 outputSchema
+    is_error=False,
+)
+```
+
+`structured_content` carries the Pydantic model serialized to JSON-safe types (datetime → ISO 8601 string, HttpUrl → string, etc.) per Pydantic v2's `mode="json"`. Clients that honor `outputSchema` (MCP 2025-06-18 strict) read `structured_content`; clients that fall back to text parse `content[0].text`.
+
+**Error path** — `CallToolResult(content=[TextContent(text=...)], is_error=True, structured_content={...})`. The structured error envelope:
 
 ```python
 class ToolError(BaseModel):
@@ -331,12 +405,13 @@ class ToolError(BaseModel):
         "surface_not_found",
         "validation_error",
         "rate_limited",
-        "response_truncated",
         "internal_error",
     ]
     message: str
     retryable: bool
     data: dict[str, JsonValue] | None = None
+
+**Truncation is a soft signal, not an error.** When a tool's response exceeds `max_response_bytes`, the output is clipped and the Pydantic model's `truncated: bool = True` field is set. `is_error` stays `False`; the truncation marker is a hint to the client to re-query with a smaller scope. `response_truncated` was previously listed as an error code; this version removes it — truncation is not failure.
 ```
 
 Stable error codes are pinned by `test_tool_error_string_mapping` so any wording change surfaces as a test failure.
@@ -349,7 +424,7 @@ Returns the tree of workspaces → panes → surfaces, including focus metadata.
 
 - **Wraps:** `workspace.list` + `surface.list` + `pane.surfaces` (fails as a unit if any sub-call fails; no partial output)
 - **Inputs:** none
-- **Output:** `{"workspaces": [Workspace, ...]}`
+- **Output:** `ListWorkspacesOutput` (Pydantic; `structured_content` = `{workspaces: [Workspace, ...]}`)
 - **Error codes:** `cmux_socket_unreachable`, `cmux_socket_eof_reconnecting`
 
 #### 2. `cmux_list_notifications`
@@ -358,7 +433,7 @@ Lists all pending cmux notifications (ring-around-pane + sidebar).
 
 - **Wraps:** `notification.list`
 - **Inputs:** none
-- **Output:** `{"notifications": [Notification, ...]}`
+- **Output:** `ListNotificationsOutput` (Pydantic; `structured_content` = `{notifications: [Notification, ...]}`)
 - **Error codes:** `cmux_socket_unreachable`, `cmux_socket_eof_reconnecting`
 
 #### 3. `cmux_identify`
@@ -367,7 +442,7 @@ Returns the focused window/workspace/pane/surface context.
 
 - **Wraps:** `system.identify`
 - **Inputs:** none
-- **Output:** `{"window": str, "workspace_id": str, "pane_id": str, "surface_id": str, "kind": SurfaceKind}`
+- **Output:** `IdentifyOutput` (Pydantic; `structured_content` = `{window, workspace_id, pane_id, surface_id, kind}`)
 - **Error codes:** `cmux_socket_unreachable`, `cmux_socket_eof_reconnecting`
 
 #### 4. `cmux_send_keys`
@@ -376,7 +451,7 @@ Sends text or a special key to a terminal surface. **Fire-and-forget** in v1 —
 
 - **Wraps:** `surface.send_text` (for text) and `surface.send_key` (for special keys)
 - **Inputs:** `SendKeysInput` (exclusive-or enforced via `model_validator`)
-- **Output:** `{"ok": true, "surface_id": str}`
+- **Output:** `SendKeysOutput` (Pydantic; `structured_content` = `{ok: true, surface_id}`)
 - **Error codes:** `validation_error`, `surface_not_found`, `cmux_socket_unreachable`
 - **See also:** `surface_read` deferred to v1.1
 
@@ -386,7 +461,7 @@ Dispatches an OS notification that rings a pane and lights up the sidebar.
 
 - **Wraps:** `notification.create`
 - **Inputs:** `NotifyInput`
-- **Output:** `{"notification_id": str, "created_at": datetime}`
+- **Output:** `NotifyOutput` (Pydantic; `structured_content` = `{notification_id, created_at}`)
 - **Error codes:** `validation_error`, `rate_limited` (rate limit: 1/s default, configurable), `cmux_socket_unreachable`
 
 #### 6. `cmux_browser_navigate`
@@ -395,7 +470,7 @@ Navigates the browser surface to a URL. `url` must be `http://` or `https://` (P
 
 - **Wraps:** `cmux browser --surface X navigate <url> [--snapshot-after]`
 - **Inputs:** `BrowserNavigateInput`
-- **Output:** `{"ok": true, "url": HttpUrl, "snapshot": BrowserSnapshot | None, "truncated": bool}`
+- **Output:** `BrowserNavigateOutput` (Pydantic; `structured_content` = `{ok, url, snapshot, truncated}`)
 - **Error codes:** `validation_error`, `surface_not_found`, `cmux_cli_failed`, `cmux_cli_timeout`, `response_truncated`
 
 #### 7. `cmux_browser_snapshot`
@@ -404,7 +479,7 @@ Returns the accessibility tree of the current page.
 
 - **Wraps:** `cmux browser --surface X snapshot --interactive`
 - **Inputs:** `BrowserSnapshotInput`
-- **Output:** `BrowserSnapshot`
+- **Output:** `BrowserSnapshot` (Pydantic; `structured_content` = `{snapshot: str, captured_at: datetime | None}`)
 - **Error codes:** `surface_not_found`, `cmux_cli_failed`, `cmux_cli_timeout`, `response_truncated`
 
 #### 8. `cmux_browser_evaluate`
@@ -413,11 +488,11 @@ Executes JavaScript in the browser context, returns the result.
 
 - **Wraps:** `cmux browser --surface X eval <js>`
 - **Inputs:** `BrowserEvaluateInput` (`expression` length 1-10,240 chars)
-- **Output:** `BrowserEvaluateResult` (envelope: `ok` + `result` + `error`)
+- **Output:** discriminated union — `BrowserEvaluateResult` on success (Pydantic; `structured_content` = `{ok: true, result: JsonValue | None}`) OR `BrowserEvaluateErrorResult` on failure (Pydantic; `structured_content` = `{ok: false, error: str, error_kind: "runtime_exception"|"not_serializable"|"timeout"}`)
 - **Behavior:**
-  - `await_promise: true` awaits top-level Promises (cmux CLI may not natively support — if not, server wraps in `Promise.resolve().then(...)` and polls via `eval` to wait)
-  - JS exceptions return `{ok: false, error: {message, stack}}`
-  - Non-serializable returns (`undefined`, DOM nodes, functions) are coerced to JSON-serializable or return `{ok: false, error: "not serializable"}`
+  - JS exceptions return `BrowserEvaluateErrorResult(error_kind="runtime_exception", error="<message>\n<stack>")`
+  - Non-serializable returns (`undefined`, DOM nodes, functions, Symbols) return `BrowserEvaluateErrorResult(error_kind="not_serializable", error="<type description>")`
+  - **Promise semantics:** if `await_promise: false` (default), top-level Promise returns evaluate to a Promise handle (most likely a `"[object Promise]"` string after cmux CLI serialization) — caller should use `await_promise: true`. If `await_promise: true`, the server polls via repeated `eval` calls at `promise_poll_interval_ms` (default 100ms) until settled or `promise_total_timeout_seconds` (default 30s) elapses; one `browser_evaluate(await_promise=true)` call holds one semaphore slot during polling.
   - **Trust model:** arbitrary JS executes in the cmux browser context; agents that surface cmux-mcp to untrusted callers MUST NOT expose this tool, or MUST constrain via proxy
 - **Error codes:** `validation_error`, `surface_not_found`, `browser_eval_runtime_error`, `cmux_cli_timeout`, `response_truncated`
 
@@ -427,7 +502,7 @@ Clicks an element by CSS selector.
 
 - **Wraps:** `cmux browser --surface X click <selector> [--snapshot-after]`
 - **Inputs:** `BrowserClickInput`
-- **Output:** `{"ok": true, "snapshot": BrowserSnapshot | None}`
+- **Output:** `BrowserClickOutput` (Pydantic; `structured_content` = `{ok, snapshot}`)
 - **Error codes:** `validation_error`, `surface_not_found`, `browser_selector_not_found`, `cmux_cli_failed`, `cmux_cli_timeout`
 
 #### 10. `cmux_browser_type`
@@ -436,7 +511,7 @@ Types text into an input by CSS selector (uses `fill` semantics).
 
 - **Wraps:** `cmux browser --surface X fill <selector> --text <text>`
 - **Inputs:** `BrowserTypeInput` (`text` length ≤ 10,240; `submit` adds Enter after fill)
-- **Output:** `{"ok": true}`
+- **Output:** `BrowserTypeOutput` (Pydantic; `structured_content` = `{ok}`)
 - **Error codes:** `validation_error`, `surface_not_found`, `browser_selector_not_found`, `cmux_cli_failed`, `cmux_cli_timeout`
 
 #### 11. `cmux_browser_tabs`
@@ -445,16 +520,16 @@ Lists the open tabs of the browser surface. **Read-only** in v1 — see "Out of 
 
 - **Wraps:** `cmux browser --surface X tab list --json`
 - **Inputs:** `BrowserTabsInput`
-- **Output:** `{"tabs": [BrowserTab, ...]}`
+- **Output:** `BrowserTabsOutput` (Pydantic; `structured_content` = `{tabs: [BrowserTab, ...]}` — ordered by tab index ascending)
 - **Error codes:** `surface_not_found`, `cmux_cli_failed`, `cmux_cli_timeout`
 
 #### 12. `cmux_browser_console`
 
-Reads console messages and JS errors from the browser surface. **Aggregates two CLI calls** (`console list` + `errors list`) via `asyncio.gather(..., return_exceptions=True)`; partial-failure semantics: if either sub-call fails, the failing sub-list returns empty (logged at WARN).
+Reads console messages and JS errors from the browser surface. **Aggregates two CLI calls** (`console list` + `errors list`) via `asyncio.gather(..., return_exceptions=True)`; partial-failure semantics: if either sub-call fails, the failing sub-list returns empty AND the result's `partial_failure: true` + `failed_subcalls: ["console_list" | "errors_list"]` flags the partial drop.
 
 - **Wraps:** `cmux browser --surface X console list` + `errors list`
 - **Inputs:** `BrowserConsoleInput` (`limit` 1-1000; `level` filter applied client-side after fetch; `since` for de-duplication)
-- **Output:** `BrowserConsoleResult`
+- **Output:** `BrowserConsoleResult` (Pydantic; `structured_content` = `{messages: [...], errors: [...], truncated: bool, partial_failure: bool, failed_subcalls: [...]}`)
 - **Ordering:** `messages` and `errors` are each ordered by `timestamp` ascending (oldest first). `limit` applied after filtering.
 - **Error codes:** `surface_not_found`, `cmux_cli_failed`, `cmux_cli_timeout`, `response_truncated`
 
@@ -585,9 +660,9 @@ class CmuxMCPConfig(BaseSettings):
     port: int = DEFAULT_PORT  # see below
     socket_path: Path = Path(os.environ.get("CMUX_SOCKET_PATH", "/tmp/cmux.sock"))
     cmux_cli_path: Path | None = None  # None → auto-discovery (see below)
-    socket_short_timeout_seconds: float = 5.0
-    socket_long_timeout_seconds: float = 15.0
-    cli_timeout_seconds: float = 30.0
+    socket_short_timeout_seconds: float = 5.0  # health probes, pings, capabilities
+    socket_long_timeout_seconds: float = 15.0  # workspace.list + surface.list + pane.surfaces composed call
+    cli_timeout_seconds: float = 30.0  # per-subprocess CLI call
     cli_max_concurrent: int = 8
     reconnect_initial_delay_seconds: float = 0.5
     reconnect_max_delay_seconds: float = 30.0
@@ -599,8 +674,23 @@ class CmuxMCPConfig(BaseSettings):
     shutdown_grace_seconds: float = 10.0
     auth_enabled: bool = False  # opt-in for non-loopback deployments
     pid_file_path: Path = Path(
-        os.environ.get("XDG_RUNTIME_DIR", "/tmp") + "/cmux-mcp/cmux-mcp.pid"
-    )
+        os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+    ) / "cmux-mcp" / "cmux-mcp.pid"
+    health_warmup_seconds: float = 60.0  # grace period before "tool never called" triggers 503
+
+    @model_validator(mode="after")
+    def _mock_mode_auto_on_non_darwin(self) -> "CmuxMCPConfig":
+        if not self.mock_mode and sys.platform != "darwin":
+            object.__setattr__(self, "mock_mode", True)
+        return self
+
+    @model_validator(mode="after")
+    def _reject_non_loopback_without_auth(self) -> "CmuxMCPConfig":
+        if self.host not in ("127.0.0.1", "::1", "localhost") and not self.auth_enabled:
+            raise ValueError(
+                f"host={self.host!r} requires auth_enabled=True (loopback-only by default)"
+            )
+        return self
 
     @model_validator(mode="after")
     def _mock_mode_auto_on_non_darwin(self) -> "CmuxMCPConfig":
@@ -691,7 +781,9 @@ Per the discipline, each feed carries the four signals: `entities_count`, `last_
 
 **HTTP status code:**
 - 200 OK if all feeds `ok`
-- 503 Service Unavailable if any feed `degraded` (socket disconnected, CLI binary missing, or any tool feed has `cycles_total == 0 && errors_total == 0` after 60s warm-up)
+- 503 Service Unavailable if any feed `degraded` (socket disconnected, CLI binary missing) OR a tool feed has `cycles_total == 0 && errors_total == 0` AND startup was >60s ago
+
+**Warm-up tracking:** `HealthFeedState` carries a `started_at: datetime` field (set on first `record_cycle`). The `/health` aggregator compares `now() - started_at > health_warmup_seconds` (default 60s) to decide whether to apply the "tool never called → degraded" rule. This avoids false-degraded during startup when tools haven't been exercised yet but the server is healthy. Mock transport has its own component (`MockTransportComponent`) with the same warm-up logic, surfaced separately so dashboards can alert on `mock_transport.cycles_total > 0` in production.
 
 **Tool feed placement:** every tool body follows:
 
@@ -700,17 +792,16 @@ async def tool_handler(...):
     state = self.tool_feeds["cmux_browser_click"]
     state.record_cycle()
     try:
-        # actual work
-        state.record_success()
-        return result
+        result = await self._do_actual_work(...)
     except CmuxError as exc:
         state.record_error()
         return ToolError(code=exc.code, message=str(exc), retryable=exc.retryable).to_call_result()
-    finally:
-        pass  # state counters persist across calls
+    else:
+        state.record_success()
+        return result
 ```
 
-`try/finally` placement: `record_cycle()` at top, `record_success()` on success, `record_error()` on exception. No outer `try/finally` needed — the cycle counter is recorded in the try and the success/error in the else/except.
+`try/except/else` placement: `record_cycle()` at top, `record_success()` in the `else` block (runs only when no exception fired), `record_error()` in the `except` block. The `else` block is critical — it ensures a `record_success()` failure cannot be misclassified as a tool error, and vice versa. Pattern matches cross-llm-mcp §4a.
 
 ## Subprocess management
 
@@ -798,6 +889,21 @@ Mock transport matches on `(method, params)` and returns the canned response. De
 - `test_stale_pid_file_recovered_on_start` — `kill -0` check + recovery
 - `test_graceful_shutdown_drains_inflight` — `shutdown_grace_seconds` respected
 - `test_log_excludes_pii_fields` — URL query stripping, expression redaction
+- `test_tool_annotation_matrix_matches_spec` — all 12 tools × 4 hints per the annotation matrix
+- `test_cmux_cli_discovery_order_when_path_unset` — probe order respected
+- `test_cmux_cli_discovery_picks_highest_version_in_caskroom` — glob + sort by version
+- `test_cmux_cli_discovery_fails_with_listing_probed_paths` — fail message format
+- `test_browser_evaluate_await_promise_polls_until_settled` — polling cadence + budget
+- `test_browser_evaluate_await_promise_holds_one_semaphore_slot` — semaphore interaction
+- `test_browser_evaluate_non_serializable_returns_error_kind` — `error_kind="not_serializable"`
+- `test_browser_evaluate_runtime_exception_returns_error_kind` — `error_kind="runtime_exception"`
+- `test_browser_console_partial_failure_sets_flag` — `partial_failure: true` when one sub-call fails
+- `test_mock_mode_warn_banner_suppressed_when_acknowledged` — `CMUX_MCP_MOCK_ACKNOWLEDGED=1` silences banner
+- `test_browser_tabs_ordered_by_index_ascending` — tab ordering
+- `test_start_rejects_non_loopback_when_auth_disabled` — host=0.0.0.0 without auth fails
+- `test_subprocess_env_filter_strips_secret_keys` — `MINIMAX_API_KEY` etc. not in child env
+- `test_notify_rate_limit_raises_after_threshold` — 1/sec default enforced
+- `test_truncated_marker_set_soft_no_response_truncated_code` — soft marker only, no error code (N5)
 
 ## Security
 
@@ -958,6 +1064,57 @@ class CmuxMCPServer(BaseOneiricServerMixin):
         return self.mcp.http_app()
 ```
 
+### `_tools.py` — registration pattern (the break-the-cycle mechanism)
+
+The cmux-mcp server builds its `FastMCP` instance inside `__init__` (per-instance, not module-level singleton). This breaks the cross-llm-mcp singleton pattern, so tools cannot use `@mcp.tool()` decorators at module load time. Instead, tools are plain functions registered programmatically in `startup()`:
+
+```python
+# cmux_mcp/_tools.py
+from fastmcp.tools import Tool
+from cmux_mcp.client import CmuxSocketTransport, CmuxCliTransport
+from cmux_mcp.errors import CmuxError
+from cmux_mcp.health import ToolFeedComponent
+
+
+def register_tools(
+    mcp: FastMCP,
+    socket_transport: CmuxSocketTransport,
+    cli_transport: CmuxCliTransport,
+    tool_feeds: dict[str, ToolFeedComponent],
+) -> None:
+    """Register all 12 tools on the FastMCP instance. Idempotent."""
+
+    @mcp.tool(
+        name="cmux_list_workspaces",
+        description="List all workspaces with their panes and surfaces.",
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+    )
+    async def cmux_list_workspaces() -> ListWorkspacesOutput:
+        state = tool_feeds["cmux_list_workspaces"]
+        state.record_cycle()
+        try:
+            data = await socket_transport.request("workspace.list")
+            # ... compose workspaces, panes, surfaces from sub-calls ...
+            result = ListWorkspacesOutput(workspaces=workspaces)
+        except CmuxError as exc:
+            state.record_error()
+            return exc.to_tool_error()
+        else:
+            state.record_success()
+            return result
+
+    # ... 11 more tools registered the same way ...
+
+
+def build_tool_feed_components() -> list[ToolFeedComponent]:
+    """Returns one ToolFeedComponent per tool; called once during startup()."""
+    return [ToolFeedComponent(name=f"tool.{name}") for name in TOOL_NAMES]
+```
+
+Why not the singleton pattern? cmux-mcp's server instance carries `config` (which the per-session lifecycle reads) and `transport` instances (which are async-constructed). Module-level singleton would force eager construction and lose per-session config. The trade-off is registering 12 tools programmatically rather than via decorators — slight verbosity in exchange for explicit lifecycle control.
+
+`_tools.py` exports `register_tools()` and `build_tool_feed_components()` only — no module-level state.
+
 ## Dependencies
 
 `pyproject.toml` pins (per fleet convention):
@@ -1051,3 +1208,11 @@ None at design freeze. Items deferred to v1.1+ are listed in **Scope → Out of 
 15. **Tool annotations on every tool** — per MCP 2025-03-26 spec. Without annotations, MCP clients can't render safety hints or pre-filter mutations.
 16. **`outputSchema` + `structuredContent` on every tool** — per MCP 2025-06-18 spec. Avoids stringly-typed double-parse.
 17. **Streamable HTTP pinned to MCP 2025-06-18** — supports annotations, `outputSchema`, `structuredContent`. Resumability deferred.
+18. **Per-instance `FastMCP` instead of module-level singleton** (round-3 fix, M-4) — cmux-mcp creates `self.mcp = FastMCP(...)` in `__init__` because per-session config and async-constructed transports need lifecycle control. This forces programmatic tool registration in `_tools.py.register_tools()` instead of `@mcp.tool()` decorators at module load. Trade-off: explicit lifecycle control over decorator ergonomics. Cross-llm-mcp uses the singleton pattern (compatible with its tool signature shape).
+19. **`/health` `extra_components` carries the full per-tool feed list** (round-3 fix) — cross-llm-mcp passes `extra_components=[]` and exposes peer health via a separate `get_peer_health` tool. cmux-mcp puts per-tool feed state directly in `/health` because the 12-tool surface is denser than cross-llm-mcp's 6-tool surface; a separate `get_tool_health()` tool would be overhead. Both are Bodai-discipline-compliant.
+20. **Truncation is a soft marker, not an error** (round-3 fix, N5) — `truncated: bool` on the output model signals clipping; `is_error` stays `False`. The previously-listed `response_truncated` error code is removed. Clients re-query with smaller scope on truncation.
+21. **`dangerousHint` is not used** (round-3 fix, N3) — MCP 2025-03-26 / 2025-06-18 only define 4 standard annotations; `dangerousHint` would be silently ignored by FastMCP. `destructiveHint: true` on `browser_evaluate` covers the destructive nature. The arbitrary-JS trust model is documented in tool description + README.
+22. **60s warm-up before "tool never called" triggers degraded** (round-3 fix, M-8) — `HealthFeedState.started_at` + `health_warmup_seconds` config. Avoids false-degraded during startup. Mock transport has its own component so dashboards can alert on `mock_transport.cycles_total > 0` in production.
+23. **Browser subprocess timeout split: short (5s) vs long (15s) vs CLI (30s)** (round-3 fix, M-7) — `socket_short_timeout_seconds` for health probes / pings / `system.capabilities`; `socket_long_timeout_seconds` for the composed `cmux_list_workspaces` call (`workspace.list + surface.list + pane.surfaces`); `cli_timeout_seconds` for subprocess CLI invocations.
+24. **Auth-required for non-loopback bind** (round-3 fix, M-9) — `host` not in loopback set AND `auth_enabled=False` raises a config validation error at startup. Prevents accidental `host=0.0.0.0` exposure.
+25. **Decision log row 5 wording tightened** (round-3 fix, M-3) — the original wording claimed `OneiricMCPConfig(BaseModel)` silently ignores `SettingsConfigDict` overrides. Verified: cmux-mcp uses `pydantic_settings.BaseSettings` direct subclass with explicit `SettingsConfigDict(env_prefix="CMUX_MCP_", env_file=".env", extra="allow")` for orthogonality — not strictly because OneiricMCPConfig is broken, but because direct `BaseSettings` makes the `env_prefix` precedence explicit and unit-testable without depending on OneiricMCPConfig internals.
