@@ -16,6 +16,7 @@ wiring → Tool feed placement":
 from __future__ import annotations
 
 import json
+import time
 from typing import TYPE_CHECKING
 
 from fastmcp.exceptions import ToolError
@@ -61,6 +62,13 @@ def _as_tool_error(exc: Exception) -> ToolError:
     else:
         envelope = {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
     return ToolError(json.dumps(envelope))
+
+
+# Module-level last-call timestamp for cmux_notify rate limiting (H2).
+# Naive token-bucket: rate = notify_rate_limit_per_second (1/s default).
+# Production deployments with high notify rates should use a real bucket
+# (e.g. via Redis); v0.1.x keeps it simple.
+_notify_last_call_at: float | None = None
 
 
 def register_socket_tools(
@@ -220,6 +228,22 @@ def register_socket_tools(
         body: str | None = None,
         surface_id: str | None = None,
     ) -> NotifyOutput:
+        global _notify_last_call_at
+        # Review finding H2: notify_rate_limit_per_second was config-declared
+        # but never enforced. Implement a simple last-call-gate (1/s default).
+        # A real production system would use a sliding-window token bucket.
+        # Rate is read from the transport's config (passed via CmuxMCPServer).
+        rate_per_sec = 1.0
+        sock_cfg = getattr(socket, "_config", None)
+        if sock_cfg is not None and getattr(sock_cfg, "notify_rate_limit_per_second", None):
+            rate_per_sec = float(sock_cfg.notify_rate_limit_per_second)
+        now = time.monotonic()
+        if _notify_last_call_at is not None and (now - _notify_last_call_at) < (1.0 / rate_per_sec):
+            from cmux_mcp.errors import RateLimitedError
+            wait = (1.0 / rate_per_sec) - (now - _notify_last_call_at)
+            raise RateLimitedError(
+                f"cmux_notify rate-limited; retry in {wait:.2f}s"
+            )
         validated = NotifyInput(title=title, subtitle=subtitle, body=body, surface_id=surface_id)
         state = tool_feeds["tool.cmux_notify"]
         state.record_cycle()
@@ -228,10 +252,11 @@ def register_socket_tools(
                 "notification.create",
                 validated.model_dump(mode="json", exclude_none=True),
             )
+            _notify_last_call_at = now
             result = NotifyOutput(**data)
         except Exception as exc:
             state.record_error()
-            return _error_envelope(exc)
+            raise _as_tool_error(exc) from exc
         else:
             state.record_success()
             return result

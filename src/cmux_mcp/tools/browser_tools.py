@@ -14,6 +14,7 @@ Each follows the try/except/else pattern per spec §"/health envelope wiring →
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -60,6 +61,18 @@ def _as_tool_error(exc: Exception) -> ToolError:
     return ToolError(json.dumps(envelope))
 
 
+def _truncate(text: bytes, limit: int) -> tuple[bytes, bool]:
+    """Clip `text` to `limit` bytes; return (clipped_text, was_truncated).
+
+    Review finding H1: max_response_bytes was config-declared but never
+    enforced anywhere. cmux_browser_navigate used a hardcoded 4096 on
+    stderr length (unrelated to response size) and didn't actually clip.
+    """
+    if limit > 0 and len(text) > limit:
+        return text[:limit], True
+    return text, False
+
+
 def register_browser_tools(
     mcp: "FastMCP",
     cli: "CmuxCliTransportProtocol",
@@ -86,11 +99,18 @@ def register_browser_tools(
             args.append("--snapshot-after")
         try:
             cli_result = await cli.call(args)
+            # Review finding H1: max_response_bytes is the configured stdout cap.
+            # Clip stdout to the limit and set truncated=True when over. Stderr is
+            # logged for diagnostics but is NOT part of the response shape, so
+            # it's not clipped here (operators see the full stderr in /logs).
+            max_bytes = int(getattr(cli, "_config", None) and cli._config.max_response_bytes) or 1_048_576
+            stdout, truncated = _truncate(cli_result.stdout, max_bytes)
+            _ = stdout  # stdout currently unused in response shape; kept for future
             result = BrowserNavigateOutput(
                 ok=True,
                 url=HttpUrl(str(validated.url)),
                 snapshot=None,  # snapshot parsing not implemented (Task 20)
-                truncated=len(cli_result.stderr) > 4_096,
+                truncated=truncated,
             )
         except Exception as exc:
             state.record_error()
