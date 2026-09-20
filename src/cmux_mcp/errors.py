@@ -106,13 +106,86 @@ class CmuxValidationError(CmuxError):
     tool_error_code = "validation_error"
 
 
+class CmuxSocketEofReconnectingError(CmuxError):
+    """Socket hit EOF mid-flight; transport is reconnecting with backoff.
+
+    Distinct from CmuxTransportError: this means "wait for reconnect" (retryable).
+    Review finding H5: spec requires clients distinguish eof-reconnecting from
+    unreachable to make retry-or-give-up decisions.
+    """
+
+    tool_error_code = "cmux_socket_eof_reconnecting"
+
+    def __init__(self, message: str = "cmux socket EOF; reconnecting", **kw: Any) -> None:
+        super().__init__(message, retryable=True, **kw)
+
+
+class CmuxSocketMaxRetriesExceededError(CmuxError):
+    """Reconnect attempts exhausted; transport is in 'disconnected' state.
+
+    Clients should NOT auto-retry. Review finding H5.
+    """
+
+    tool_error_code = "cmux_socket_max_retries_exceeded"
+
+    def __init__(self, message: str = "cmux socket unreachable: max retries exceeded", **kw: Any) -> None:
+        super().__init__(message, retryable=False, **kw)
+
+
+class CmuxCliFailedError(CmuxError):
+    """cmux CLI subprocess returned non-zero exit. Distinct from CmuxTimeoutError.
+
+    The subprocess exited, didn't time out. Clients should check the underlying
+    stderr in `data` to decide retry semantics. Review finding H5.
+    """
+
+    tool_error_code = "cmux_cli_failed"
+
+    def __init__(self, message: str, **kw: Any) -> None:
+        super().__init__(message, retryable=False, **kw)
+
+
+class BrowserEvalRuntimeError(CmuxError):
+    """cmux browser eval raised a runtime JS exception."""
+
+    tool_error_code = "browser_eval_runtime_error"
+
+
+class BrowserSelectorNotFoundError(CmuxError):
+    """CSS selector matched zero elements in cmux browser."""
+
+    tool_error_code = "browser_selector_not_found"
+
+
+class SurfaceNotFoundError(CmuxError):
+    """cmux surface_id does not exist."""
+
+    tool_error_code = "surface_not_found"
+
+
+class RateLimitedError(CmuxError):
+    """Per-tool rate limit hit (e.g. cmux_notify notify_rate_limit_per_second)."""
+
+    tool_error_code = "rate_limited"
+
+    def __init__(self, message: str = "rate limit exceeded; retry after backoff", **kw: Any) -> None:
+        super().__init__(message, retryable=True, **kw)
+
+
 __all__ = [
     "CmuxError",
     "CmuxTransportError",
+    "CmuxSocketEofReconnectingError",
+    "CmuxSocketMaxRetriesExceededError",
     "CmuxTimeoutError",
+    "CmuxCliFailedError",
     "CmuxOnlyAccessDeniedError",
     "UnsupportedPlatformError",
     "CmuxBinaryNotFoundError",
     "CmuxProtocolError",
     "CmuxValidationError",
+    "BrowserEvalRuntimeError",
+    "BrowserSelectorNotFoundError",
+    "SurfaceNotFoundError",
+    "RateLimitedError",
 ]

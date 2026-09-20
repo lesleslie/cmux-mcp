@@ -89,7 +89,7 @@ All settings via `CMUX_MCP_*` env vars. See `settings/cmux-mcp.yaml` for committ
 
 - macOS-only; non-macOS hosts must use `CMUX_MCP_MOCK=1` (auto-flipped with WARN banner)
 - cmux's `cmuxOnly` access mode restricts socket connections to processes spawned inside cmux terminals
-- PII exclusion list: URLs have query strings stripped, JS expressions length-prefixed, typed text length-only
+- PII redaction helpers (`redact_url_query_string`, `redact_expression`) exist in `logging_setup.py` for future log-site use; v0.1.x ships with no PII-logging call sites by default (deferred)
 - Subprocess env filtered to `SUBPROCESS_ENV_ALLOWLIST` to prevent leaking API keys
 - Default loopback bind; non-loopback requires `CMUX_MCP_AUTH_ENABLED=true`
 
