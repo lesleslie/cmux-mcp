@@ -8,14 +8,17 @@ wiring → Tool feed placement":
         result = await socket.request(...)
     except CmuxError as exc:
         state.record_error()
-        return exc.to_tool_error()
+        raise _as_tool_error(exc) from exc
     else:
         state.record_success()
         return result
 """
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
+
+from fastmcp.exceptions import ToolError
 
 from cmux_mcp.models import (
     IdentifyOutput,
@@ -41,12 +44,23 @@ def _record(state: "ToolFeedComponent") -> None:
     state.record_cycle()
 
 
-def _error_envelope(exc: Exception) -> dict[str, object]:
-    """Map a CmuxError to its ToolError envelope; map everything else to internal_error."""
+def _as_tool_error(exc: Exception) -> ToolError:
+    """Wrap a CmuxError (or other Exception) as fastmcp.exceptions.ToolError.
+
+    FastMCP's tool-handler (server.py:1357-1358) catches any exception, re-raises
+    as ToolError(f"Error calling tool {name!r}: {e}"), and the protocol layer
+    sets isError: true. Review finding C6: returning a plain dict was being
+    wrapped in isError: false. Now we raise instead, so isError: true.
+
+    The structured envelope (code, message, retryable, data) is JSON-encoded
+    into the ToolError message text — clients parse it back.
+    """
     from cmux_mcp.errors import CmuxError
     if isinstance(exc, CmuxError):
-        return exc.to_tool_error()
-    return {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+        envelope = exc.to_tool_error()
+    else:
+        envelope = {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+    return ToolError(json.dumps(envelope))
 
 
 def register_socket_tools(
@@ -91,7 +105,7 @@ def register_socket_tools(
             result = ListWorkspacesOutput(workspaces=workspaces)
         except Exception as exc:
             state.record_error()
-            return _error_envelope(exc)
+            raise _as_tool_error(exc) from exc
         else:
             state.record_success()
             return result
@@ -115,7 +129,7 @@ def register_socket_tools(
             )
         except Exception as exc:
             state.record_error()
-            return _error_envelope(exc)
+            raise _as_tool_error(exc) from exc
         else:
             state.record_success()
             return result
@@ -137,7 +151,7 @@ def register_socket_tools(
             result = IdentifyOutput(**data)
         except Exception as exc:
             state.record_error()
-            return _error_envelope(exc)
+            raise _as_tool_error(exc) from exc
         else:
             state.record_success()
             return result
@@ -176,7 +190,7 @@ def register_socket_tools(
             result = SendKeysOutput(surface_id=validated.surface_id)
         except Exception as exc:
             state.record_error()
-            return _error_envelope(exc)
+            raise _as_tool_error(exc) from exc
         else:
             state.record_success()
             return result

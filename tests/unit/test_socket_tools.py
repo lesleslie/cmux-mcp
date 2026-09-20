@@ -54,15 +54,27 @@ class TestCmuxListWorkspaces:
         assert result.workspaces[0].id == "workspace:1"
 
     @pytest.mark.asyncio
-    async def test_socket_error_returns_tool_error(self, feeds: dict[str, object]) -> None:
+    async def test_socket_error_raises_tool_error(self, feeds: dict[str, object]) -> None:
+        """Regression for review finding C6: tool errors must propagate as exceptions
+        so FastMCP's protocol layer sets isError: true on the CallToolResult.
+
+        Previously the tool body returned a plain dict; FastMCP wrapped it in
+        is_error=False, breaking MCP clients that gate on isError per the
+        canonical 2025-06-18 contract.
+        """
+        import json
+        import pytest
+        from fastmcp.exceptions import ToolError
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
         socket.add_response("workspace.list", {}, {"error": {"message": "socket gone"}})
         register_socket_tools(mcp, socket, feeds)
-        result = await _invoke(mcp, "cmux_list_workspaces")
-        # CmuxProtocolError is raised; mapped to tool_error envelope dict.
-        assert isinstance(result, dict)
-        assert result["code"] == "cmux_protocol_error"
+        with pytest.raises(ToolError) as excinfo:
+            await _invoke(mcp, "cmux_list_workspaces")
+        # Structured envelope is JSON-encoded in the ToolError message text;
+        # clients parse it back to recover code/retryable/data.
+        envelope = json.loads(str(excinfo.value))
+        assert envelope["code"] == "cmux_protocol_error"
 
 
 @pytest.mark.unit

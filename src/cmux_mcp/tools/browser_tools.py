@@ -13,8 +13,11 @@ Each follows the try/except/else pattern per spec §"/health envelope wiring →
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
+
+from fastmcp.exceptions import ToolError
 
 from cmux_mcp.models import (
     BrowserClickInput,
@@ -44,11 +47,17 @@ def _record(state: "ToolFeedComponent") -> None:
     state.record_cycle()
 
 
-def _error_envelope(exc: Exception) -> dict[str, object]:
+def _as_tool_error(exc: Exception) -> ToolError:
+    """Wrap a CmuxError (or other Exception) as fastmcp.exceptions.ToolError.
+
+    See socket_tools.py for full rationale (review finding C6).
+    """
     from cmux_mcp.errors import CmuxError
     if isinstance(exc, CmuxError):
-        return exc.to_tool_error()
-    return {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+        envelope = exc.to_tool_error()
+    else:
+        envelope = {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+    return ToolError(json.dumps(envelope))
 
 
 def register_browser_tools(
@@ -85,7 +94,7 @@ def register_browser_tools(
             )
         except Exception as exc:
             state.record_error()
-            return _error_envelope(exc)
+            raise _as_tool_error(exc) from exc
         else:
             # Spec §"/health envelope wiring → Tool feed placement" mandates the
             # success record lives in the else: clause. Without this, /health
@@ -108,7 +117,7 @@ def register_browser_tools(
             )
         except Exception as exc:
             state.record_error()
-            return _error_envelope(exc)
+            raise _as_tool_error(exc) from exc
         else:
             state.record_success()
             return BrowserSnapshot(
@@ -136,7 +145,7 @@ def register_browser_tools(
             result = BrowserTabsOutput(tabs=tabs)
         except Exception as exc:
             state.record_error()
-            return _error_envelope(exc)
+            raise _as_tool_error(exc) from exc
         else:
             state.record_success()
             return result
@@ -169,7 +178,7 @@ def register_browser_tools(
             cli_result = await cli.call(args, timeout=30.0)
         except Exception as exc:
             state.record_error()
-            return _error_envelope(exc)
+            raise _as_tool_error(exc) from exc
         if cli_result.returncode != 0:
             state.record_error()
             stderr = cli_result.stderr.decode("utf-8", errors="replace")
@@ -207,7 +216,7 @@ def register_browser_tools(
             await cli.call(args)
         except Exception as exc:
             state.record_error()
-            return _error_envelope(exc)
+            raise _as_tool_error(exc) from exc
         else:
             state.record_success()
             return BrowserClickOutput(ok=True)
@@ -236,7 +245,7 @@ def register_browser_tools(
             await cli.call(args)
         except Exception as exc:
             state.record_error()
-            return _error_envelope(exc)
+            raise _as_tool_error(exc) from exc
         else:
             state.record_success()
             return BrowserTypeOutput(ok=True)
@@ -268,7 +277,7 @@ def register_browser_tools(
             )
         except Exception as exc:
             state.record_error()
-            return _error_envelope(exc)
+            raise _as_tool_error(exc) from exc
         state.record_success()
         messages: list[ConsoleMessage] = []
         errors: list[BrowserError] = []
