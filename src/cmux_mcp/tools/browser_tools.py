@@ -103,7 +103,12 @@ def register_browser_tools(
             # Clip stdout to the limit and set truncated=True when over. Stderr is
             # logged for diagnostics but is NOT part of the response shape, so
             # it's not clipped here (operators see the full stderr in /logs).
-            max_bytes = int(getattr(cli, "_config", None) and cli._config.max_response_bytes) or 1_048_576
+            # The mock transport (CmuxMockTransport) doesn't carry a config; fall
+            # back to the 1 MiB default in tests + dev.
+            max_bytes = 1_048_576
+            sock_cfg = getattr(cli, "_config", None)
+            if sock_cfg is not None and getattr(sock_cfg, "max_response_bytes", None):
+                max_bytes = int(sock_cfg.max_response_bytes)
             stdout, truncated = _truncate(cli_result.stdout, max_bytes)
             _ = stdout  # stdout currently unused in response shape; kept for future
             result = BrowserNavigateOutput(
