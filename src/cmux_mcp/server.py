@@ -26,6 +26,7 @@ from cmux_mcp.health import (
     build_tool_feed_components,
 )
 from cmux_mcp.logging_setup import maybe_warn_mock_mode
+from cmux_mcp._tools import register_tools
 
 
 def acquire_pid_file(path: Path) -> None:
@@ -105,6 +106,13 @@ class CmuxMCPServer(BaseOneiricServerMixin):
             version=__version__,
             extra_components=[comp.snapshot() for comp in self._health_components.values()],
         )
+
+        # Wire all 12 tools onto the FastMCP instance. Per review finding C1
+        # (mcp-integration-expert, live-verified): without this call, server
+        # startup completes successfully but tools/list returns {"tools":[]}.
+        # This call MUST run after transport + tool-feed init (the tools
+        # capture the transports and feed components in their closures).
+        register_tools(self.mcp, self.socket_transport, self.cli_transport, self._tool_feeds)
 
         await self._create_startup_snapshot(custom_components={
             "cmux_socket": self.socket_transport.state if hasattr(self.socket_transport, "state") else "n/a",

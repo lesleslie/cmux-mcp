@@ -91,6 +91,34 @@ class TestHealthRegistration:
         assert "mock_transport" in server._health_components
         assert len(server._tool_feeds) == 12
 
+    @pytest.mark.asyncio
+    async def test_startup_registers_all_12_tools(self) -> None:
+        """Regression for review finding C1: register_tools() must be called
+        from startup(), otherwise tools/list returns {"tools":[]} live."""
+        config = CmuxMCPConfig()
+        server = CmuxMCPServer(config)
+        server.socket_transport = CmuxMockTransport()
+        server.cli_transport = CmuxMockTransport()
+        server.runtime.initialize = AsyncMock()  # type: ignore[method-assign]
+        server._create_startup_snapshot = AsyncMock()  # type: ignore[method-assign]
+        with patch("cmux_mcp.server.register_http_health_route"):
+            await server.startup()
+        # Live verification: the FastMCP instance exposes all 12 cmux tools.
+        tools = list(await server.mcp.list_tools())
+        assert len(tools) == 12, (
+            f"expected 12 tools registered, got {len(tools)}: "
+            f"{[t.name for t in tools]}"
+        )
+        names = {t.name for t in tools}
+        expected = {
+            "cmux_list_workspaces", "cmux_list_notifications", "cmux_identify",
+            "cmux_send_keys", "cmux_notify",
+            "cmux_browser_navigate", "cmux_browser_snapshot", "cmux_browser_evaluate",
+            "cmux_browser_click", "cmux_browser_type", "cmux_browser_tabs",
+            "cmux_browser_console",
+        }
+        assert names == expected
+
 
 @pytest.mark.unit
 class TestPidManagement:
