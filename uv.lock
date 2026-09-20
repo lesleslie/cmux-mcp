@@ -592,6 +592,11 @@ dev = [
     { name = "ruff" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "crackerjack" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "crackerjack", marker = "extra == 'dev'", specifier = ">=0.20" },
@@ -610,6 +615,9 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "crackerjack", specifier = ">=0.82.0" }]
 
 [[package]]
 name = "codespell"

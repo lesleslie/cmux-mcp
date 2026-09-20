@@ -46,3 +46,8 @@ markers = [
     "integration: integration tests (require live cmux)",
     "e2e: end-to-end tests",
 ]
+
+[dependency-groups]
+dev = [
+    "crackerjack>=0.82.0",
+]
