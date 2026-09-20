@@ -80,5 +80,17 @@ class CmuxMCPConfig(BaseSettings):
             )
         return self
 
+    # Bridge to mcp-common's BaseOneiricServerMixin, which reads `http_port` and
+    # `http_host` (with hasattr guard). Spec decision log row 8 keeps the field
+    # names as `port` and `host`; properties expose the mcp-common names without
+    # forcing a rename.
+    @property
+    def http_port(self) -> int:
+        return self.port
+
+    @property
+    def http_host(self) -> str:
+        return self.host
+
 
 __all__ = ["DEFAULT_PORT", "CmuxMCPConfig"]

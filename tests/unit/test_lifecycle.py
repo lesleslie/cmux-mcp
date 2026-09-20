@@ -41,6 +41,12 @@ class TestLifecycle:
     async def test_shutdown_closes_transports(self) -> None:
         config = CmuxMCPConfig()
         server = CmuxMCPServer(config)
+        # Stub out oneiric runtime methods — the lifecycle test only cares about
+        # transport cleanup, not snapshot/cleanup machinery.
+        server.runtime.initialize = AsyncMock()  # type: ignore[method-assign]
+        server.runtime.cleanup = AsyncMock()  # type: ignore[method-assign]
+        server._create_startup_snapshot = AsyncMock()  # type: ignore[method-assign]
+        server._create_shutdown_snapshot = AsyncMock()  # type: ignore[method-assign]
         mock_socket = CmuxMockTransport()
         mock_cli = CmuxMockTransport()
         mock_socket.aclose = AsyncMock()
@@ -62,6 +68,11 @@ class TestHealthRegistration:
         server = CmuxMCPServer(config)
         server.socket_transport = CmuxMockTransport()
         server.cli_transport = CmuxMockTransport()
+        # Stub oneiric runtime + snapshot methods — health registration doesn't
+        # depend on them. Patches are after the mock transport injection so
+        # CmuxMCPServer.__init__ still completes (which calls _init_runtime_components).
+        server.runtime.initialize = AsyncMock()  # type: ignore[method-assign]
+        server._create_startup_snapshot = AsyncMock()  # type: ignore[method-assign]
         # Patch register_http_health_route so the test doesn't actually bind a route
         # to the FastMCP instance (which would touch internal Starlette routing).
         with patch("cmux_mcp.server.register_http_health_route") as mock_register:

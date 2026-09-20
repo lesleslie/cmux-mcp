@@ -63,3 +63,9 @@ logs/
 
 # Worktrees (no-op; designed for repos that use clones)
 .claude/worktrees/
+
+# Oneiric runtime cache (mcp-common BaseOneiricServerMixin writes snapshots here)
+.oneiric_cache/
+
+# direnv auto-generated files
+.envrc

@@ -13,7 +13,7 @@ def main() -> None:
         server_class=CmuxMCPServer,
         config_class=CmuxMCPConfig,
         name="cmux-mcp",
-        description="MCP server for cmux terminal automation (macOS only).",
+        _description="MCP server for cmux terminal automation (macOS only).",
     )
     app = factory.create_app()
     app()
