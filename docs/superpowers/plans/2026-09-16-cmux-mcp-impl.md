@@ -2,11 +2,12 @@
 status: active
 role: implementation
 date: 2026-09-16
-last_reviewed: 2026-09-16
+last_reviewed: 2026-09-19
 superseded_by: null
 blocks_on:
   - docs/superpowers/specs/2026-09-16-cmux-mcp-design.md
 topic: cmux-mcp
+amendments: see docs/superpowers/specs/2026-09-16-cmux-mcp-design.md "Amendment Log" section
 ---
 
 # cmux-mcp Implementation Plan
@@ -25,7 +26,7 @@ topic: cmux-mcp
 
 These constraints apply to every task below. Each task's "Interfaces" and "Step" sections do not re-state them.
 
-- **Python:** `>= 3.13` (per `pyproject.toml` `requires-python`)
+- **Python:** `>= 3.14` (per `pyproject.toml` `requires-python`; amended 2026-09-19 from `>= 3.13` — `mcp-common` 0.26.x and 0.27.x both require `>= 3.14`)
 - **Module imports:** Every production source file MUST start with `from __future__ import annotations` as the first non-comment line
 - **Logger name:** `cmux_mcp.<module>` (e.g., `cmux_mcp.config`); use `logger.exception(...)` in every `except` block; never `logger.error(..., exc_info=True)`
 - **No print():** Use the Oneiric logger. No stdlib `logging`. No print()
@@ -115,7 +116,8 @@ tests/
 name = "cmux-mcp"
 version = "0.1.0"
 description = "MCP server for cmux terminal automation (macOS only)"
-requires-python = ">=3.13"
+# Amendment 2026-09-19: bumped from ">=3.13" — see Amendment Log in the spec.
+requires-python = ">=3.14"
 license = "BSD-3-Clause"
 authors = [
     {name = "Les Leslie", email = "les@wedgwoodwebworks.com"},
@@ -2250,11 +2252,15 @@ class CmuxCliTransport:
         timeout: float | None = None,
     ) -> CliResult:
         full_args = [str(self._binary_path), *args]
-        # Per-surface lock if surface_id is in args (heuristic: extract --surface X)
+        # Per-surface lock if surface_id is in args (heuristic: extract --surface X).
+        # Amendment 2026-09-19: lock is awaited (it's a coroutine returning asyncio.Lock),
+        # not used as an async context manager directly — 'async with coroutine' raises
+        # TypeError. See spec Amendment Log entry 7.
         surface_id = self._extract_surface_id(args)
         async with self._global_sem:
             if surface_id:
-                async with self._surface_lock_for(surface_id):
+                lock = await self._surface_lock_for(surface_id)
+                async with lock:
                     return await self._invoke(full_args, timeout)
             else:
                 self._active += 1
@@ -4568,6 +4574,30 @@ Append `2026-09-16-cmux-mcp-impl.md` entry with status `active`, role `implement
 cd /Users/les/Projects/cmux-mcp && git add docs/superpowers/plans/PLAN_INDEX.md && \
   git -c user.name=les -c user.email=les@wedgwoodwebworks.com commit -m "docs(plans): add cmux-mcp implementation plan to index"
 ```
+
+## Amendment Log
+
+Plan was authored 2026-09-16; implementation began 2026-09-19 and surfaced these
+drifts in Tasks 1–13. Each amendment is also annotated inline at the relevant step.
+See spec's Amendment Log section for the canonical statements.
+
+| # | Task | Original | Amendment | Why |
+|---|------|----------|------------|-----|
+| 1 | 1 (pyproject) | `requires-python = ">=3.13"` | `">=3.14"` | `mcp-common` 0.26.x and 0.27.x both require Python 3.14; `uv sync` could not resolve at 3.13 |
+| 2 | 1 (uv command) | `uv sync --group dev` | `uv sync --extra dev` | Plan's pyproject uses `[project.optional-dependencies]`, not PEP 735 `[dependency-groups]`; `--extra` matches the table, `--group` is rejected by uv 0.12.17 |
+| 3 | 7 (`mock_mode` field) | `mock_mode: bool = False` + `if not self.mock_mode: ...` validator | `bool \| None = None` sentinel + `if self.mock_mode is None: ...` validator + `validation_alias="CMUX_MCP_MOCK"` | (a) Sentinel distinguishes "default False" from "explicit False via env" so the spec's "only if not explicitly set" semantic holds; (b) `validation_alias` overrides Pydantic-settings' default `env_prefix + field_name` scheme (which would produce `CMUX_MCP_MOCK_MODE`) so the spec's literal env var name (`CMUX_MCP_MOCK`) is honored |
+| 4 | 7 (env-derived defaults) | `Path(os.environ.get(..., "/default"))` evaluated at class-body time | `Field(default_factory=lambda: Path(os.environ.get(..., "/default")))` | Pydantic v2 idiom for env-derived defaults; re-evaluates per instance |
+| 5 | 12 (per-surface lock call site) | `async with self._surface_lock_for(surface_id):` | `lock = await self._surface_lock_for(surface_id); async with lock:` | `_surface_lock_for` is a coroutine returning `asyncio.Lock`; "async with coroutine" raises `TypeError` |
+| 6 | 12 (semaphore test) | Patches `transport.call` | Patch `transport._invoke` | Patching `call` bypasses the semaphore entirely; `_invoke` patch keeps `call()`'s semaphore in the path |
+| 7 | 13 (per-surface lock test) | Patches `transport.call`, uses `args[2]` (which is `"--surface"`) as identifier | Patch `transport._invoke`, use `CmuxCliTransport._extract_surface_id(args)` | Same fix as #6; `args[2]` is `"--surface"` not the surface_id |
+| 8 | 8 (cli discovery test) | `test_explicit_path_missing_raises` assumes no cmux on test machine | Patch `_candidate_paths` to return `[]` for hermetic test | cmux is installed on this Mac (Homebrew); without the patch, the test finds it via `shutil.which("cmux")` and the assertion fails |
+| 9 | 11 (correlation test) | Mock `readline()` returns `b""` (EOF) when empty | `asyncio.Event` gates readline; `event.clear()` after wake | `b""` triggers reader_task's EOF/reconnect path before any request is sent |
+| 10 | 9 (mock transport test) | Asserted `result == {"result": {"pong": True}}` | Asserted `result == {"pong": True}` (inner result) | `CmuxSocketTransport.request` returns the inner `result` (not envelope); mock must mirror |
+
+Future plan authors: add `uv lock --dry-run` to the spec-review checklist. Amendments 1,
+2, and the Pydantic v2 idioms in 3-4 are detectable by this single command run after
+authoring. Amendments 5-10 are normal implementation-time surprises; running the
+plan's own tests in dry-run / collect-only mode catches them earlier in the loop.
 
 
 

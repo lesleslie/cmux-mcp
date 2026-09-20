@@ -31,7 +31,7 @@ topic: cmux-mcp
 
 | Spec | Date | Status | Topic |
 |---|---|---|---|
-| [../specs/2026-09-16-cmux-mcp-design.md](../specs/2026-09-16-cmux-mcp-design.md) | 2026-09-16 | complete | cmux-mcp design (after 1 round review + 1 round criticals fix + 1 round-3 spot-check fix) |
+| [../specs/2026-09-16-cmux-mcp-design.md](../specs/2026-09-16-cmux-mcp-design.md) | 2026-09-16 | partial | cmux-mcp design (amended 2026-09-19 during Tasks 1-13 impl; see Amendment Log in spec) |
 
 ## Review Entry Points
 

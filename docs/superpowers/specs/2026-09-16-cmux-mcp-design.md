@@ -1,9 +1,11 @@
 # cmux-mcp Design Spec
 
-> **Status:** active (round-2 criticals applied)
+> **Status:** partial (round-2 criticals + implementation-time amendments applied; re-review deferred to v0.1.0)
 > **Date:** 2026-09-16
+> **Last reviewed:** 2026-09-19 (Tasks 1-13 implementation surfaced 15 plan-text drifts; see Amendment log)
 > **Spec type:** architectural
 > **Decision log:** end of document
+> **Amendment log:** end of document (after Decision log)
 
 ## Goal
 
@@ -334,6 +336,8 @@ class BrowserConsoleInput(BaseModel):
 
 `JsonValue` is defined as `str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]` to avoid `Any` in tool outputs.
 
+> **Amendment 2026-09-19** — The `JsonValue` type alias **must** use Python 3.12+ PEP 695 syntax (`type JsonValue = ...`) with the recursive member **unquoted** (`list[JsonValue]`, not `list["JsonValue"]`). Pydantic v2.13 raises `RecursionError` during schema generation when the recursive type is string-quoted. The current Python target is 3.14; PEP 695 is available.
+
 ## Tool surface (12 tools)
 
 All 12 tools carry tool annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). All 12 expose `inputSchema` and `outputSchema` via FastMCP's `@mcp.tool(annotations=..., output_schema=...)`. All 12 emit `HealthFeedState` updates per the `/health` discipline.
@@ -658,7 +662,12 @@ class CmuxMCPConfig(BaseSettings):
 
     host: str = "127.0.0.1"
     port: int = DEFAULT_PORT  # see below
-    socket_path: Path = Path(os.environ.get("CMUX_SOCKET_PATH", "/tmp/cmux.sock"))
+    # Amendment 2026-09-19: socket_path and pid_file_path use Pydantic v2
+    # `default_factory` so env-derived defaults are re-evaluated per instance
+    # (Pydantic v2 idiom; replaces class-body-time `os.environ.get` evaluation
+    # which captured the env at import time and made tests env-departmental patch
+    # paths ineffective).
+    socket_path: Path = Field(default_factory=lambda: Path(os.environ.get("CMUX_SOCKET_PATH", "/tmp/cmux.sock")))
     cmux_cli_path: Path | None = None  # None → auto-discovery (see below)
     socket_short_timeout_seconds: float = 5.0  # health probes, pings, capabilities
     socket_long_timeout_seconds: float = 15.0  # workspace.list + surface.list + pane.surfaces composed call
@@ -669,19 +678,24 @@ class CmuxMCPConfig(BaseSettings):
     reconnect_max_attempts: int = 5
     max_response_bytes: int = 1_048_576  # 1 MiB
     notify_rate_limit_per_second: float = 1.0
-    mock_mode: bool = False
+    # Amendment 2026-09-19: `mock_mode` uses sentinel `bool | None = None` so the
+    # validator can distinguish "user didn't set the env var" from "user explicitly
+    # set CMUX_MCP_MOCK=false". `validation_alias` overrides Pydantic-settings'
+    # default `env_prefix + field_name` scheme (which would produce CMUX_MCP_MOCK_MODE)
+    # so the spec's literal env var name (CMUX_MCP_MOCK) is honored.
+    mock_mode: bool | None = Field(default=None, validation_alias="CMUX_MCP_MOCK")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     shutdown_grace_seconds: float = 10.0
     auth_enabled: bool = False  # opt-in for non-loopback deployments
-    pid_file_path: Path = Path(
-        os.environ.get("XDG_RUNTIME_DIR", "/tmp")
-    ) / "cmux-mcp" / "cmux-mcp.pid"
+    pid_file_path: Path = Field(default_factory=lambda: Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "cmux-mcp" / "cmux-mcp.pid")
     health_warmup_seconds: float = 60.0  # grace period before "tool never called" triggers 503
 
     @model_validator(mode="after")
     def _mock_mode_auto_on_non_darwin(self) -> "CmuxMCPConfig":
-        if not self.mock_mode and sys.platform != "darwin":
-            object.__setattr__(self, "mock_mode", True)
+        # Sentinel pattern: None means "no explicit setting" — pick based on
+        # platform. An explicit True or False from env wins (per spec decision log row 7).
+        if self.mock_mode is None:
+            self.mock_mode = sys.platform != "darwin"
         return self
 
     @model_validator(mode="after")
@@ -690,12 +704,6 @@ class CmuxMCPConfig(BaseSettings):
             raise ValueError(
                 f"host={self.host!r} requires auth_enabled=True (loopback-only by default)"
             )
-        return self
-
-    @model_validator(mode="after")
-    def _mock_mode_auto_on_non_darwin(self) -> "CmuxMCPConfig":
-        if not self.mock_mode and sys.platform != "darwin":
-            object.__setattr__(self, "mock_mode", True)
         return self
 ```
 
@@ -1124,7 +1132,9 @@ Why not the singleton pattern? cmux-mcp's server instance carries `config` (whic
 name = "cmux-mcp"
 version = "0.1.0"
 description = "MCP server for cmux terminal automation"
-requires-python = ">=3.13"
+# Amendment 2026-09-19: requires-python bumped from >=3.13 to >=3.14 because
+# mcp-common 0.26.x and 0.27.x both require Python >=3.14.
+requires-python = ">=3.14"
 license = "BSD-3-Clause"
 authors = [
     {name = "Les Leslie", email = "les@wedgwoodwebworks.com"},
@@ -1216,3 +1226,22 @@ None at design freeze. Items deferred to v1.1+ are listed in **Scope → Out of 
 23. **Browser subprocess timeout split: short (5s) vs long (15s) vs CLI (30s)** (round-3 fix, M-7) — `socket_short_timeout_seconds` for health probes / pings / `system.capabilities`; `socket_long_timeout_seconds` for the composed `cmux_list_workspaces` call (`workspace.list + surface.list + pane.surfaces`); `cli_timeout_seconds` for subprocess CLI invocations.
 24. **Auth-required for non-loopback bind** (round-3 fix, M-9) — `host` not in loopback set AND `auth_enabled=False` raises a config validation error at startup. Prevents accidental `host=0.0.0.0` exposure.
 25. **Decision log row 5 wording tightened** (round-3 fix, M-3) — the original wording claimed `OneiricMCPConfig(BaseModel)` silently ignores `SettingsConfigDict` overrides. Verified: cmux-mcp uses `pydantic_settings.BaseSettings` direct subclass with explicit `SettingsConfigDict(env_prefix="CMUX_MCP_", env_file=".env", extra="allow")` for orthogonality — not strictly because OneiricMCPConfig is broken, but because direct `BaseSettings` makes the `env_prefix` precedence explicit and unit-testable without depending on OneiricMCPConfig internals.
+
+## Amendment Log
+
+Amendments applied during implementation (Tasks 1–13, 2026-09-19). Spec status flipped
+from `complete` to `partial` until these are re-reviewed.
+
+| # | Where | Original | Amendment | Why |
+|---|-------|----------|------------|-----|
+| 1 | pyproject `requires-python` | `">=3.13"` | `">=3.14"` | `mcp-common` 0.26.x and 0.27.x both require `>=3.14`; `uv sync` could not resolve at 3.13 |
+| 2 | `JsonValue` type alias | `JsonValue = str \| int \| ... \| list["JsonValue"] \| ...` | PEP 695 `type JsonValue = str \| int \| ... \| list[JsonValue] \| ...` | Pydantic v2.13 raises `RecursionError` during schema generation for string-quoted recursive types |
+| 3 | `mock_mode` field | `mock_mode: bool = False` | `mock_mode: bool \| None = Field(default=None, validation_alias="CMUX_MCP_MOCK")` | (a) Sentinel `None` distinguishes "default False" from "explicit False via env" so the spec's "only if not explicitly set" semantic holds; (b) `validation_alias` overrides Pydantic-settings' default `env_prefix + field_name` scheme (which would produce `CMUX_MCP_MOCK_MODE`) so the spec's literal env var name (`CMUX_MCP_MOCK`) is honored |
+| 4 | `socket_path` / `pid_file_path` defaults | `Path(os.environ.get(..., "/default"))` evaluated at class-body time | `Field(default_factory=lambda: Path(os.environ.get(..., "/default")))` | Pydantic v2 idiom for env-derived defaults; re-evaluates per instance so tests that set env after import still see updated paths |
+| 5 | `_mock_mode_auto_on_non_darwin` validator | `if not self.mock_mode and sys.platform != "darwin"` (only flips `False → True`) | `if self.mock_mode is None: self.mock_mode = sys.platform != "darwin"` (only flips `None → True/False`) | Required by Amendment 3(a) — the sentinel-aware variant respects explicit env overrides |
+| 6 | Mock transport `request()` return shape | Originally specified to return `response["result"]`; test asserted full envelope `{"result": {...}}` | Keep impl returning inner `result` (matches `CmuxSocketTransport.request`); test corrected | Consistency between mock and real transport's return contract |
+
+Future plan authors: add `uv lock --dry-run` to the spec-review checklist. Amendments 1
+and 2 are dependencies-and-API-surface drifts that this single command catches in
+seconds; amendments 3-5 are Pydantic v2 idioms a paper review cannot detect without
+running the plan's own tests.
