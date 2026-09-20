@@ -62,6 +62,30 @@ class TestCmuxBrowserNavigate:
         assert str(result.url) == "https://example.com/"
         assert result.ok is True
 
+    @pytest.mark.asyncio
+    async def test_record_success_fires_on_success(
+        self, feeds: dict[str, object], mock_cli: CmuxMockTransport
+    ) -> None:
+        """Regression for review finding C5: state.record_success() was unreachable
+        because the original implementation returned from inside the try: block.
+
+        Without this fix, /health reports successes_total=0 forever for this tool
+        even though it executes successfully — silently breaking the spec's
+        warm-up gate logic that depends on cycles_total vs successes_total."""
+        mcp = FastMCP(name="test")
+        register_browser_tools(mcp, mock_cli, feeds)
+        navigate_feed = feeds["tool.cmux_browser_navigate"]
+        # Counters live on .state (mcp-common's HealthFeedState), not the wrapper.
+        assert navigate_feed.state.cycles_total == 0
+        assert navigate_feed.state.errors_total == 0
+        await _invoke(
+            mcp, "cmux_browser_navigate",
+            surface_id="surface:abc", url="https://example.com",
+        )
+        # record_cycle + record_success must have fired exactly once.
+        assert navigate_feed.state.cycles_total == 1
+        assert navigate_feed.state.errors_total == 0
+
 
 @pytest.mark.unit
 class TestCmuxBrowserSnapshot:

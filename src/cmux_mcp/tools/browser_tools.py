@@ -76,7 +76,7 @@ def register_browser_tools(
             args.append("--snapshot-after")
         try:
             cli_result = await cli.call(args)
-            return BrowserNavigateOutput(
+            result = BrowserNavigateOutput(
                 ok=True,
                 url=HttpUrl(str(validated.url)),
                 snapshot=None,  # snapshot parsing not implemented (Task 20)
@@ -86,7 +86,11 @@ def register_browser_tools(
             state.record_error()
             return _error_envelope(exc)
         else:
+            # Spec §"/health envelope wiring → Tool feed placement" mandates the
+            # success record lives in the else: clause. Without this, /health
+            # reports successes_total=0 forever for this tool (review finding C5).
             state.record_success()
+            return result
 
     @mcp.tool(
         name="cmux_browser_snapshot",
