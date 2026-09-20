@@ -23,9 +23,8 @@ class TestToolRegistration:
         assert len(feeds) == 12
 
     @pytest.mark.asyncio
-    async def test_register_tools_registers_placeholder_count(self) -> None:
-        """Task 17: registers 1 stub tool as proof of wiring. Task 18 fills in 5.
-        Tasks 19-22 fill in the remaining 7 browser tools (12 total)."""
+    async def test_register_tools_registers_socket_set(self) -> None:
+        """Task 18: 5 socket tools registered. Tasks 19-22 fill in 7 browser tools (12 total)."""
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
         cli = CmuxMockTransport()
@@ -34,4 +33,6 @@ class TestToolRegistration:
         # FastMCP 3.x: mcp._tool_manager doesn't exist (removed in 3.x). Use
         # mcp.list_tools() (async) to introspect registered tools.
         tools = list(await mcp.list_tools())
-        assert len(tools) >= 1, "register_tools should register at least one tool"
+        assert len(tools) == 5, "expected 5 socket tools"
+        names = {t.name for t in tools}
+        assert "cmux_list_workspaces" in names

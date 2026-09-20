@@ -1,13 +1,35 @@
 """cmux_mcp.tools.socket_tools — registers the 5 socket-direct tools.
 
-Task 17 registers a single stub (`cmux_list_workspaces`) as proof of wiring.
-Task 18 fills in the remaining 4 socket tools.
+Each tool follows the try/except/else/return pattern per spec §"/health envelope
+wiring → Tool feed placement":
+    state = tool_feeds[name]
+    state.record_cycle()
+    try:
+        result = await socket.request(...)
+    except CmuxError as exc:
+        state.record_error()
+        return exc.to_tool_error()
+    else:
+        state.record_success()
+        return result
 """
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from cmux_mcp.models import ListWorkspacesOutput
+from cmux_mcp.models import (
+    IdentifyOutput,
+    ListNotificationsOutput,
+    ListWorkspacesOutput,
+    Notification,
+    NotifyInput,
+    NotifyOutput,
+    Pane,
+    SendKeysInput,
+    SendKeysOutput,
+    Surface,
+    Workspace,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -15,20 +37,175 @@ if TYPE_CHECKING:
     from cmux_mcp.health import ToolFeedComponent
 
 
+def _record(state: "ToolFeedComponent") -> None:
+    state.record_cycle()
+
+
+def _error_envelope(exc: Exception) -> dict[str, object]:
+    """Map a CmuxError to its ToolError envelope; map everything else to internal_error."""
+    from cmux_mcp.errors import CmuxError
+    if isinstance(exc, CmuxError):
+        return exc.to_tool_error()
+    return {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+
+
 def register_socket_tools(
     mcp: "FastMCP",
     socket: "CmuxSocketTransportProtocol",
     tool_feeds: dict[str, "ToolFeedComponent"],
 ) -> None:
-    """Stub registration for Task 17 — full socket toolset in Task 18."""
-    # Import ListWorkspacesOutput at module level so FastMCP can resolve the
-    # annotation when @mcp.tool is applied. Otherwise the name is local to
-    # register_socket_tools() and FastMCP's signature inspector can't find it.
+    """Register the 5 socket-direct tools on the FastMCP instance."""
+
     @mcp.tool(
         name="cmux_list_workspaces",
-        description="[stub] list all workspaces with their panes and surfaces.",
+        description="List all workspaces with their panes and surfaces.",
+        annotations={
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def cmux_list_workspaces() -> ListWorkspacesOutput:
-        """Stub: returns empty list. Task 18 will compose workspace.list +
-        surface.list + pane.surfaces into a real tree."""
-        return ListWorkspacesOutput(workspaces=[])
+        state = tool_feeds["tool.cmux_list_workspaces"]
+        state.record_cycle()
+        try:
+            ws_data = await socket.request("workspace.list")
+            workspaces: list[Workspace] = []
+            for ws in ws_data.get("workspaces", []):
+                ws_id = ws["id"]
+                pane_data = await socket.request("pane.surfaces", {"workspace_id": ws_id})
+                workspaces.append(Workspace(
+                    id=ws_id,
+                    title=ws.get("title", ""),
+                    focused=ws.get("focused", False),
+                    panes=[Pane(
+                        id=p["id"],
+                        surfaces=[Surface(
+                            id=s["id"],
+                            kind=s["kind"],
+                            cwd=s.get("cwd"),
+                            focused=s.get("focused", False),
+                        ) for s in p.get("surfaces", [])],
+                    ) for p in pane_data.get("panes", [])],
+                ))
+            result = ListWorkspacesOutput(workspaces=workspaces)
+        except Exception as exc:
+            state.record_error()
+            return _error_envelope(exc)
+        else:
+            state.record_success()
+            return result
+
+    @mcp.tool(
+        name="cmux_list_notifications",
+        description="List pending cmux notifications.",
+        annotations={
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def cmux_list_notifications() -> ListNotificationsOutput:
+        state = tool_feeds["tool.cmux_list_notifications"]
+        state.record_cycle()
+        try:
+            data = await socket.request("notification.list")
+            result = ListNotificationsOutput(
+                notifications=[Notification(**n) for n in data.get("notifications", [])]
+            )
+        except Exception as exc:
+            state.record_error()
+            return _error_envelope(exc)
+        else:
+            state.record_success()
+            return result
+
+    @mcp.tool(
+        name="cmux_identify",
+        description="Return the focused window/workspace/pane/surface context.",
+        annotations={
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def cmux_identify() -> IdentifyOutput:
+        state = tool_feeds["tool.cmux_identify"]
+        state.record_cycle()
+        try:
+            data = await socket.request("system.identify")
+            result = IdentifyOutput(**data)
+        except Exception as exc:
+            state.record_error()
+            return _error_envelope(exc)
+        else:
+            state.record_success()
+            return result
+
+    @mcp.tool(
+        name="cmux_send_keys",
+        description=(
+            "Send text or a special key to a terminal surface (fire-and-forget). "
+            "Pass exactly one of `text` or `key`."
+        ),
+        annotations={
+            "destructiveHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def cmux_send_keys(
+        surface_id: str,
+        text: str | None = None,
+        key: str | None = None,
+    ) -> SendKeysOutput:
+        # Pydantic validation enforces exclusive-or at the model boundary.
+        validated = SendKeysInput(surface_id=surface_id, text=text, key=key)
+        state = tool_feeds["tool.cmux_send_keys"]
+        state.record_cycle()
+        try:
+            if validated.text is not None:
+                await socket.request(
+                    "surface.send_text",
+                    {"surface_id": validated.surface_id, "text": validated.text},
+                )
+            else:
+                await socket.request(
+                    "surface.send_key",
+                    {"surface_id": validated.surface_id, "key": validated.key},
+                )
+            result = SendKeysOutput(surface_id=validated.surface_id)
+        except Exception as exc:
+            state.record_error()
+            return _error_envelope(exc)
+        else:
+            state.record_success()
+            return result
+
+    @mcp.tool(
+        name="cmux_notify",
+        description="Dispatch an OS notification that rings a pane and lights up the sidebar.",
+        annotations={
+            "openWorldHint": True,
+        },
+    )
+    async def cmux_notify(
+        title: str,
+        subtitle: str | None = None,
+        body: str | None = None,
+        surface_id: str | None = None,
+    ) -> NotifyOutput:
+        validated = NotifyInput(title=title, subtitle=subtitle, body=body, surface_id=surface_id)
+        state = tool_feeds["tool.cmux_notify"]
+        state.record_cycle()
+        try:
+            data = await socket.request(
+                "notification.create",
+                validated.model_dump(mode="json", exclude_none=True),
+            )
+            result = NotifyOutput(**data)
+        except Exception as exc:
+            state.record_error()
+            return _error_envelope(exc)
+        else:
+            state.record_success()
+            return result
