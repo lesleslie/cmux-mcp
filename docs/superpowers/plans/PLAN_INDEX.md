@@ -25,13 +25,13 @@ topic: cmux-mcp
 
 | Plan | Date | Status | Role | Spec | Notes |
 |---|---|---|---|---|---|
-| [2026-09-16-cmux-mcp-impl.md](./2026-09-16-cmux-mcp-impl.md) | 2026-09-16 | active | implementation | [spec](../specs/2026-09-16-cmux-mcp-design.md) | 28 tasks; 12 tools (5 socket + 7 browser); BSD-3-Clause; port 3061; macOS-only with mock-mode escape hatch |
+| [2026-09-16-cmux-mcp-impl.md](./2026-09-16-cmux-mcp-impl.md) | 2026-09-16 | shipped | implementation | [spec](../specs/2026-09-16-cmux-mcp-design.md) | 28 tasks complete; 12 tools (5 socket + 7 browser); BSD-3-Clause; port 3061; macOS-only with mock-mode escape hatch. Tagged v0.1.0. 116 tests passing. |
 
 ## Specs
 
 | Spec | Date | Status | Topic |
 |---|---|---|---|
-| [../specs/2026-09-16-cmux-mcp-design.md](../specs/2026-09-16-cmux-mcp-design.md) | 2026-09-16 | partial | cmux-mcp design (amended 2026-09-19 during Tasks 1-13 impl; see Amendment Log in spec) |
+| [../specs/2026-09-16-cmux-mcp-design.md](../specs/2026-09-16-cmux-mcp-design.md) | 2026-09-16 | shipped | cmux-mcp design (amended 2026-09-19 during Tasks 1-13 impl; see Amendment Log in spec) |
 
 ## Review Entry Points
 
