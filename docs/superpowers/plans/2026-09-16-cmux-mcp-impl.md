@@ -192,11 +192,13 @@ from cmux_mcp.server import CmuxMCPServer
 
 def main() -> None:
     """Entry point for `cmux-mcp` console script."""
+    # Amendment 2026-09-19 (#E): keyword is `_description` not `description`
+    # (verified via `inspect.signature(MCPServerCLIFactory.create_server_cli)`).
     factory = MCPServerCLIFactory.create_server_cli(
         server_class=CmuxMCPServer,
         config_class=CmuxMCPConfig,
         name="cmux-mcp",
-        description="MCP server for cmux terminal automation (macOS only).",
+        _description="MCP server for cmux terminal automation (macOS only).",
     )
     app = factory.create_app()
     app()
@@ -4598,6 +4600,24 @@ Future plan authors: add `uv lock --dry-run` to the spec-review checklist. Amend
 2, and the Pydantic v2 idioms in 3-4 are detectable by this single command run after
 authoring. Amendments 5-10 are normal implementation-time surprises; running the
 plan's own tests in dry-run / collect-only mode catches them earlier in the loop.
+
+### Phase 3 amendments (Tasks 14-16)
+
+| # | Task | Original | Amendment | Why |
+|---|------|----------|------------|-----|
+| E | 1 Step 3 (`__main__.py`) | `description="..."` | `_description="..."` | `MCPServerCLIFactory.create_server_cli` keyword is `_description` (verified via `inspect.signature`) |
+| F | 7 (CmuxMCPConfig) | (Plan did not document this) | Add `http_port` and `http_host` `@property` accessors delegating to `port`/`host` | mcp-common reads `config.http_port`/`config.http_host`; without the bridge, server bound to port 8000 and ignored `CMUX_MCP_PORT` |
+| G | 14 (server.py) | `self._create_startup_snapshot(...)` (sync) | `await self._create_startup_snapshot(...)` | Both are `async def`; sync call returns coroutine never awaited → RuntimeWarning + broken health route |
+| H | 16 (server.py /health wiring) | Pass `FeedComponent` instances to `extra_components` | Pass `[comp.snapshot() for comp in ...]` (list of dicts) | mcp-common docstring: "passed through verbatim" — list of dicts, not instances |
+| I | 14 (`CmuxMCPServer.__init__`) | (Plan did not document this) | `self.runtime = self._init_runtime_components("cmux-mcp")` in `__init__`; `await self.runtime.initialize()` in `startup`; `await self.runtime.cleanup()` in `shutdown` | Without runtime init, `_create_*_snapshot` fail with `AttributeError: 'CmuxMCPServer' object has no attribute 'runtime'` |
+
+Phase 3 amendments share a pattern: **mcp-common API surface drift**. None
+detectable by paper review alone. `inspect.signature` on every external
+function the plan references would have caught all five in under 60 seconds.
+
+End-to-end smoke verified: `CMUX_MCP_MOCK=1 uv run cmux-mcp start` binds
+port 3061; `GET /health` returns JSON with 15 feed snapshots
+(2 transports + 1 mock_transport + 12 tool feeds).
 
 
 

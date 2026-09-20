@@ -775,13 +775,24 @@ register_http_health_route(
     mcp,
     service_name="cmux-mcp",
     version=__version__,
+    # extra_components is a list of DICTS (per mcp-common docstring: "passed through
+    # verbatim"), one per feed. Each feed's .snapshot() returns the canonical four-signal
+    # shape. Amendment 2026-09-19 (#18): original plan passed FeedComponent instances;
+    # that fails at runtime because mcp-common treats extra_components as opaque dicts.
     extra_components=[
-        SocketFeedComponent(transport=socket_transport),
-        BrowserCliFeedComponent(transport=cli_transport),
-        *tool_feed_components,  # 12 HealthFeedState instances, one per tool
+        SocketFeedComponent(transport=socket_transport).snapshot(),
+        BrowserCliFeedComponent(transport=cli_transport).snapshot(),
+        MockTransportComponent().snapshot(),
+        *(comp.snapshot() for comp in tool_feed_components),  # 12 tool feeds
     ],
 )
 ```
+
+> **Amendment 2026-09-19 (#G)** — `_create_startup_snapshot()` and `_create_shutdown_snapshot()` (inherited from `BaseOneiricServerMixin`) are **async**. Plan Tasks 14-16 example code called them sync, which broke the bound-port handshake. Call sites MUST `await` them.
+
+> **Amendment 2026-09-19 (#I)** — CmuxMCPServer MUST call `self.runtime = self._init_runtime_components("cmux-mcp")` in `__init__` and `await self.runtime.initialize()` in `startup()` (per mcp-common canonical pattern at `mcp_common/server/base.py` lines 14-18). Without this, `_create_*_snapshot` raise `AttributeError: 'CmuxMCPServer' object has no attribute 'runtime'`.
+
+> **Amendment 2026-09-19 (#F)** — CmuxMCPConfig's spec fields are `port` and `host` (decision log row 8). mcp-common's `BaseOneiricServerMixin` reads `config.http_port` and `config.http_host` (with `hasattr` guard) to determine the bind address. CmuxMCPConfig MUST expose `http_port` and `http_host` as `@property` accessors that delegate to `port` and `host`. Do NOT rename the spec fields — the env contract uses `CMUX_MCP_PORT` / `CMUX_MCP_HOST`.
 
 Per the discipline, each feed carries the four signals: `entities_count`, `last_updated_timestamp`, `errors_total`, `cycles_total`.
 
@@ -1009,11 +1020,13 @@ from cmux_mcp.config import CmuxMCPConfig
 from cmux_mcp.server import CmuxMCPServer
 
 def main() -> None:
+    # Amendment 2026-09-19 (#E): keyword is `_description` not `description`
+    # (verified via `inspect.signature(MCPServerCLIFactory.create_server_cli)`).
     factory = MCPServerCLIFactory.create_server_cli(
         server_class=CmuxMCPServer,
         config_class=CmuxMCPConfig,
         name="cmux-mcp",
-        description="MCP server for cmux terminal automation (macOS only).",
+        _description="MCP server for cmux terminal automation (macOS only).",
     )
     app = factory.create_app()
     app()
@@ -1245,3 +1258,31 @@ Future plan authors: add `uv lock --dry-run` to the spec-review checklist. Amend
 and 2 are dependencies-and-API-surface drifts that this single command catches in
 seconds; amendments 3-5 are Pydantic v2 idioms a paper review cannot detect without
 running the plan's own tests.
+
+### Phase 3 amendments (2026-09-19, Tasks 14-16)
+
+| # | Where | Original | Amendment | Why |
+|---|-------|----------|------------|-----|
+| E | `__main__.py` factory kwargs | `description="MCP server for ..."` | `_description="MCP server for ..."` | `MCPServerCLIFactory.create_server_cli` keyword is `_description`, not `description` (verified via `inspect.signature`) |
+| F | CmuxMCPConfig → BaseOneiricServerMixin bridge | (Plan did not document this) | CmuxMCPConfig MUST expose `http_port` and `http_host` as `@property` accessors delegating to `port` and `host` | mcp-common's `BaseOneiricServerMixin` reads `config.http_port` / `config.http_host` (with `hasattr` guard); without the bridge, server bound to mcp-common's default port 8000 and ignored `CMUX_MCP_PORT` env var |
+| G | `_create_startup_snapshot` / `_create_shutdown_snapshot` async-ness | Plan code calls them sync | Call sites MUST `await` them | Both are `async def` on `BaseOneiricServerMixin`; sync call returns a coroutine that's never awaited → RuntimeWarning + broken health route |
+| H | `register_http_health_route(extra_components=...)` shape | Plan passes `FeedComponent` instances | Pass `[comp.snapshot() for comp in ...]` (list of dicts) | mcp-common's `register_http_health_route` docstring: "passed through verbatim" — each entry is a dict, not a class instance |
+| I | CmuxMCPServer runtime initialization | (Plan did not document this) | `__init__` sets `self.runtime = self._init_runtime_components("cmux-mcp")`; `startup()` `await self.runtime.initialize()`; `shutdown()` `await self.runtime.cleanup()` | Without this, `_create_*_snapshot` fail with `AttributeError: 'CmuxMCPServer' object has no attribute 'runtime'` |
+
+Phase 3 amendments share a pattern: **mcp-common API surface drift**. None
+are detectable by paper review alone. `inspect.signature(mcp_common.cli.MCPServerCLIFactory.create_server_cli)`
+and `inspect.getsource(mcp_common.server.base)` would have caught all five in
+under 60 seconds; adding both to the spec-review checklist is recommended.
+
+### Spec-review checklist (recommended addition)
+
+Run all four before declaring a plan `complete`:
+
+1. `uv lock --dry-run` — catches `requires-python` vs dep-pin mismatches
+2. `inspect.signature` for every external API the plan references — catches
+   keyword renames and signature drift
+3. `pytest --collect-only` against the plan's own tests — catches import-level
+   drift before any execution
+4. TDD execution pass (Tasks 1-N) — every commit should be red → green
+
+Phase 3 would have been caught at step 2 in under a minute per amendment.
