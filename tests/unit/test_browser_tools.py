@@ -17,6 +17,7 @@ from cmux_mcp.models import (
     BrowserNavigateOutput,
     BrowserSnapshot,
     BrowserTabsOutput,
+    BrowserTypeOutput,
 )
 from cmux_mcp.tools.browser_tools import register_browser_tools
 
@@ -199,7 +200,9 @@ class TestCmuxBrowserType:
             mcp, "cmux_browser_type",
             surface_id="surface:abc", selector="input#q", text="cmux",
         )
-        assert isinstance(result, BrowserClickOutput)  # shape parity with TypeOutput
+        # Regression for review finding H3: previously returned BrowserClickOutput
+        # (which leaks a `snapshot` field BrowserTypeOutput doesn't declare).
+        assert isinstance(result, BrowserTypeOutput)
         assert result.ok is True
 
 

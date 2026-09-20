@@ -31,6 +31,7 @@ from cmux_mcp.models import (
     BrowserTabsInput,
     BrowserTabsOutput,
     BrowserTypeInput,
+    BrowserTypeOutput,
 )
 
 if TYPE_CHECKING:
@@ -221,9 +222,10 @@ def register_browser_tools(
         selector: str,
         text: str,
         submit: bool = False,
-    ) -> BrowserClickOutput:
-        # Reuse BrowserClickOutput shape (same {ok, snapshot} fields; the spec
-        # defines a separate BrowserTypeOutput but it's structurally identical).
+    ) -> BrowserTypeOutput:
+        # Spec §"Tool surface" mandates BrowserTypeOutput (just {ok: True});
+        # using BrowserClickOutput here would leak a 'snapshot' field that
+        # strict-schema consumers don't expect (review finding H3).
         validated = BrowserTypeInput(surface_id=surface_id, selector=selector, text=text, submit=submit)
         state = tool_feeds["tool.cmux_browser_type"]
         state.record_cycle()
@@ -237,7 +239,7 @@ def register_browser_tools(
             return _error_envelope(exc)
         else:
             state.record_success()
-            return BrowserClickOutput(ok=True)
+            return BrowserTypeOutput(ok=True)
 
     @mcp.tool(
         name="cmux_browser_console",
