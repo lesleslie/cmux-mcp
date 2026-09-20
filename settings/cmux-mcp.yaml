@@ -1,0 +1,18 @@
+# cmux-mcp default settings. Env vars (CMUX_MCP_*) override.
+host: "127.0.0.1"
+port: 3061
+socket_path: "/tmp/cmux.sock"
+socket_short_timeout_seconds: 5.0
+socket_long_timeout_seconds: 15.0
+cli_timeout_seconds: 30.0
+cli_max_concurrent: 8
+reconnect_initial_delay_seconds: 0.5
+reconnect_max_delay_seconds: 30.0
+reconnect_max_attempts: 5
+max_response_bytes: 1048576  # 1 MiB
+notify_rate_limit_per_second: 1.0
+mock_mode: false
+log_level: "INFO"
+shutdown_grace_seconds: 10.0
+auth_enabled: false
+health_warmup_seconds: 60.0
