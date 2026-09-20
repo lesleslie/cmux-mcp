@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import random
+import signal as _signal
 import time
 import uuid
 from dataclasses import dataclass
@@ -141,6 +143,8 @@ __all__ = [
     "CmuxCliTransportProtocol",
     "CmuxMockTransport",
     "CmuxSocketTransport",
+    "CmuxCliTransport",
+    "SUBPROCESS_ENV_ALLOWLIST",
 ]
 
 
@@ -317,3 +321,113 @@ class CmuxSocketTransport:
             except Exception:
                 pass
         self._state = "disconnected"
+
+
+# ---------------------------------------------------------------------------
+# CmuxCliTransport — single-shot subprocess invocation
+# ---------------------------------------------------------------------------
+
+# Allowlist for env vars passed to cmux subprocesses. Anything else (e.g.
+# MINIMAX_API_KEY, MAHAVISHNU_AUTH_SECRET) is filtered out. Per spec §"Subprocess env".
+SUBPROCESS_ENV_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "PATH", "LANG", "LC_ALL", "LC_COLLATE", "LC_CTYPE", "LC_MONETARY",
+        "LC_NUMERIC", "LC_TIME", "TMPDIR", "USER", "HOME",
+        "CMUX_SOCKET_PATH", "CMUX_SURFACE_ID", "CMUX_WORKSPACE_ID",
+    }
+)
+
+
+def _filtered_env() -> dict[str, str]:
+    return {k: v for k, v in os.environ.items() if k in SUBPROCESS_ENV_ALLOWLIST}
+
+
+class CmuxCliTransport:
+    """Single-shot subprocess. NOT retry-safe — cmux state already mutated.
+
+    Per spec §"CmuxCliTransport — subprocess management":
+      - asyncio.create_subprocess_exec with stdout/stderr PIPEd
+      - per-call timeout via asyncio.wait_for(proc.communicate(), timeout=...)
+      - SIGTERM (1s grace) then SIGKILL on timeout
+      - stderr drained concurrently
+      - global asyncio.Semaphore (default 8) caps fan-out
+      - per-surface asyncio.Lock serializes same-surface calls
+    """
+
+    def __init__(self, config: CmuxMCPConfig, binary_path: str | Path) -> None:
+        self._config = config
+        self._binary_path = Path(binary_path)
+        self._global_sem = asyncio.Semaphore(config.cli_max_concurrent)
+        self._surface_locks: dict[str, asyncio.Lock] = {}
+        self._active = 0
+        self._lock_lock = asyncio.Lock()
+        self._env = _filtered_env()
+
+    async def call(
+        self,
+        args: Sequence[str],
+        *,
+        timeout: float | None = None,
+    ) -> CliResult:
+        full_args = [str(self._binary_path), *args]
+        surface_id = self._extract_surface_id(args)
+        async with self._global_sem:
+            if surface_id:
+                async with self._surface_lock_for(surface_id):
+                    return await self._invoke(full_args, timeout)
+            self._active += 1
+            try:
+                return await self._invoke(full_args, timeout)
+            finally:
+                self._active -= 1
+
+    @staticmethod
+    def _extract_surface_id(args: Sequence[str]) -> str | None:
+        for i, a in enumerate(args):
+            if a == "--surface" and i + 1 < len(args):
+                return args[i + 1]
+        return None
+
+    async def _surface_lock_for(self, surface_id: str) -> asyncio.Lock:
+        async with self._lock_lock:
+            lock = self._surface_locks.get(surface_id)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._surface_locks[surface_id] = lock
+            return lock
+
+    async def _invoke(self, full_args: list[str], timeout: float | None) -> CliResult:
+        proc = await asyncio.create_subprocess_exec(
+            *full_args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=self._env,
+        )
+        start = time.monotonic()
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(),
+                timeout=timeout or self._config.cli_timeout_seconds,
+            )
+        except asyncio.TimeoutError as exc:
+            proc.send_signal(_signal.SIGTERM)
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=1.0)
+            except asyncio.TimeoutError:
+                proc.send_signal(_signal.SIGKILL)
+                await proc.wait()
+            raise CmuxTimeoutError(f"cmux CLI timeout: args={full_args!r}") from exc
+        return CliResult(
+            ok=proc.returncode == 0,
+            stdout=stdout,
+            stderr=stderr,
+            returncode=proc.returncode or 0,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
+
+    async def aclose(self) -> None:
+        return None
+
+    @property
+    def active_subprocesses(self) -> int:
+        return self._active
