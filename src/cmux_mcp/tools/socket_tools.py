@@ -87,20 +87,32 @@ def register_socket_tools(
             workspaces: list[Workspace] = []
             for ws in ws_data.get("workspaces", []):
                 ws_id = ws["id"]
+                # Per spec §"Tool 1": wraps workspace.list + surface.list + pane.surfaces.
+                # Review finding H4: previous impl iterated pane_data.get("panes", [])
+                # (wrong field — passed tests only because the fixture had an empty list).
+                # Compose: workspace-level surfaces from surface.list, per-pane
+                # surfaces from pane.surfaces (which returns {"panes": [{id, surfaces}, ...]}).
+                surf_data = await socket.request("surface.list", {"workspace_id": ws_id})
                 pane_data = await socket.request("pane.surfaces", {"workspace_id": ws_id})
+                panes: list[Pane] = []
+                for pane in pane_data.get("panes", []):
+                    panes.append(Pane(
+                        id=pane["id"],
+                        surfaces=[Surface(**s) for s in pane.get("surfaces", [])],
+                    ))
+                # Workspace-level surfaces attach to the first pane, or fall back to
+                # a synthetic root pane if the workspace has no panes yet.
+                workspace_surfaces = [Surface(**s) for s in surf_data.get("surfaces", [])]
+                if workspace_surfaces:
+                    if panes:
+                        panes[0].surfaces.extend(workspace_surfaces)
+                    else:
+                        panes.append(Pane(id=f"{ws_id}:root", surfaces=workspace_surfaces))
                 workspaces.append(Workspace(
                     id=ws_id,
                     title=ws.get("title", ""),
                     focused=ws.get("focused", False),
-                    panes=[Pane(
-                        id=p["id"],
-                        surfaces=[Surface(
-                            id=s["id"],
-                            kind=s["kind"],
-                            cwd=s.get("cwd"),
-                            focused=s.get("focused", False),
-                        ) for s in p.get("surfaces", [])],
-                    ) for p in pane_data.get("panes", [])],
+                    panes=panes,
                 ))
             result = ListWorkspacesOutput(workspaces=workspaces)
         except Exception as exc:

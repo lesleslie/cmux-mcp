@@ -38,20 +38,43 @@ class TestCmuxListWorkspaces:
         socket = CmuxMockTransport()
         socket.add_response(
             "workspace.list", {},
-            {"result": {"workspaces": [{"id": "workspace:1", "title": "W1", "panes": []}]}},
+            {"result": {"workspaces": [{"id": "workspace:1", "title": "W1", "focused": True}]}},
         )
         socket.add_response(
             "surface.list", {"workspace_id": "workspace:1"},
-            {"result": {"surfaces": []}},
+            {"result": {"surfaces": [{
+                "id": "surface:ws-root",
+                "kind": "terminal",
+                "cwd": "/home/user",
+                "focused": False,
+            }]}},
         )
         socket.add_response(
             "pane.surfaces", {"workspace_id": "workspace:1"},
-            {"result": {"pane_id": "pane:1", "surfaces": []}},
+            {"result": {"panes": [{
+                "id": "pane:1",
+                "surfaces": [{
+                    "id": "surface:pane",
+                    "kind": "browser",
+                    "cwd": None,
+                    "focused": True,
+                }],
+            }]}},
         )
         register_socket_tools(mcp, socket, feeds)
         result = await _invoke(mcp, "cmux_list_workspaces")
         assert isinstance(result, ListWorkspacesOutput)
         assert result.workspaces[0].id == "workspace:1"
+        assert result.workspaces[0].title == "W1"
+        assert result.workspaces[0].focused is True
+        # Loop body must execute — verify both sub-calls produced surfaces.
+        panes = result.workspaces[0].panes
+        assert len(panes) == 1
+        assert panes[0].id == "pane:1"
+        # surface.list's "surface:ws-root" appended to the first pane.
+        assert len(panes[0].surfaces) == 2
+        surface_ids = {s.id for s in panes[0].surfaces}
+        assert surface_ids == {"surface:pane", "surface:ws-root"}
 
     @pytest.mark.asyncio
     async def test_socket_error_raises_tool_error(self, feeds: dict[str, object]) -> None:
