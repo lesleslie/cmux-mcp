@@ -1,4 +1,4 @@
-"""Tests for src/cmux_mcp/models.py — domain models."""
+"""Tests for cmux_mcp/models.py — domain models."""
 
 from __future__ import annotations
 

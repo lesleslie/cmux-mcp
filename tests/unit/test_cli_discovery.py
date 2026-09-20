@@ -1,4 +1,4 @@
-"""Tests for src/cmux_mcp/cli_discovery.py."""
+"""Tests for cmux_mcp/cli_discovery.py."""
 
 from __future__ import annotations
 

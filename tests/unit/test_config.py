@@ -1,4 +1,4 @@
-"""Tests for src/cmux_mcp/config.py."""
+"""Tests for cmux_mcp/config.py."""
 
 from __future__ import annotations
 

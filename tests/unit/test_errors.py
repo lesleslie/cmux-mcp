@@ -1,4 +1,4 @@
-"""Tests for src/cmux_mcp/errors.py — the CmuxError hierarchy."""
+"""Tests for cmux_mcp/errors.py — the CmuxError hierarchy."""
 
 from __future__ import annotations
 
