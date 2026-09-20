@@ -10,6 +10,13 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, HttpUrl, model_validator
 
+# JsonValue defined per spec §"Pydantic models" — recursive JSON-safe union
+# used by tool output models to avoid `Any` in tool outputs.
+# PEP 695 `type` statement (Python 3.12+) is required so Pydantic v2.13 can
+# resolve the recursion statically without the string-quoted forward reference
+# trick that older Python required.
+type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
+
 # Regex patterns (per spec §"Security → Input validation")
 SURFACE_ID_PATTERN = r"^surface:[a-zA-Z0-9_-]+$"
 PANE_ID_PATTERN = r"^pane:[a-zA-Z0-9_-]+$"
@@ -201,6 +208,76 @@ class BrowserConsoleInput(BaseModel):
     since: datetime | None = None
 
 
+# ---------------------------------------------------------------------------
+# Tool output models (per spec §"Tool output models")
+# ---------------------------------------------------------------------------
+
+
+class ListWorkspacesOutput(BaseModel):
+    workspaces: list[Workspace]
+
+
+class ListNotificationsOutput(BaseModel):
+    notifications: list[Notification]
+
+
+class IdentifyOutput(BaseModel):
+    window: str
+    workspace_id: Annotated[str, Field(pattern=WORKSPACE_ID_PATTERN)]
+    pane_id: Annotated[str, Field(pattern=PANE_ID_PATTERN)]
+    surface_id: Annotated[str, Field(pattern=SURFACE_ID_PATTERN)]
+    kind: SurfaceKind
+
+
+class SendKeysOutput(BaseModel):
+    ok: Literal[True] = True
+    surface_id: Annotated[str, Field(pattern=SURFACE_ID_PATTERN)]
+
+
+class NotifyOutput(BaseModel):
+    notification_id: Annotated[str, Field(pattern=NOTIFICATION_ID_PATTERN)]
+    created_at: datetime
+
+
+class BrowserNavigateOutput(BaseModel):
+    ok: Literal[True] = True
+    url: HttpUrl
+    snapshot: BrowserSnapshot | None = None
+    truncated: bool = False  # soft signal: response was clipped at max_response_bytes
+
+
+class BrowserEvaluateResult(BaseModel):
+    """Success path for `cmux_browser_evaluate`."""
+
+    ok: bool = True
+    result: JsonValue | None = None
+    error: BrowserError | None = None
+
+
+class BrowserEvaluateErrorResult(BaseModel):
+    """Discriminated error shape for non-serializable returns or runtime errors."""
+
+    ok: Literal[False] = False
+    result: None = None
+    error: Annotated[str, Field(min_length=1)]
+    error_kind: Literal["runtime_exception", "not_serializable", "timeout"]
+
+
+class BrowserClickOutput(BaseModel):
+    ok: Literal[True] = True
+    snapshot: BrowserSnapshot | None = None
+
+
+class BrowserTypeOutput(BaseModel):
+    ok: Literal[True] = True
+
+
+class BrowserTabsOutput(BaseModel):
+    """Tabs ordered by tab index ascending (left-to-right in tab bar)."""
+
+    tabs: list[BrowserTab]
+
+
 __all__ = [
     # ID patterns
     "SURFACE_ID_PATTERN",
@@ -230,4 +307,17 @@ __all__ = [
     "BrowserTypeInput",
     "BrowserTabsInput",
     "BrowserConsoleInput",
+    # Tool outputs
+    "JsonValue",
+    "ListWorkspacesOutput",
+    "ListNotificationsOutput",
+    "IdentifyOutput",
+    "SendKeysOutput",
+    "NotifyOutput",
+    "BrowserNavigateOutput",
+    "BrowserEvaluateResult",
+    "BrowserEvaluateErrorResult",
+    "BrowserClickOutput",
+    "BrowserTypeOutput",
+    "BrowserTabsOutput",
 ]

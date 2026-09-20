@@ -29,6 +29,16 @@ from cmux_mcp.models import (
     BrowserTypeInput,
     NotifyInput,
     SendKeysInput,
+    # Tool outputs
+    BrowserClickOutput,
+    BrowserEvaluateErrorResult,
+    BrowserNavigateOutput,
+    BrowserTabsOutput,
+    IdentifyOutput,
+    ListNotificationsOutput,
+    ListWorkspacesOutput,
+    NotifyOutput,
+    SendKeysOutput,
 )
 
 
@@ -196,3 +206,69 @@ class TestBrowserConsoleInput:
         assert inp.limit == 50
         assert inp.level == ConsoleLevel.LOG
         assert inp.since is None
+
+
+@pytest.mark.unit
+class TestToolOutputModels:
+    def test_list_workspaces_output_wraps_workspace_list(self) -> None:
+        out = ListWorkspacesOutput(workspaces=[])
+        assert out.workspaces == []
+
+    def test_list_notifications_output_wraps_notification_list(self) -> None:
+        out = ListNotificationsOutput(notifications=[])
+        assert out.notifications == []
+
+    def test_identify_output_shape(self) -> None:
+        out = IdentifyOutput(
+            window="main",
+            workspace_id="workspace:1",
+            pane_id="pane:1",
+            surface_id="surface:abc",
+            kind=SurfaceKind.TERMINAL,
+        )
+        assert out.kind == "terminal"
+
+    def test_send_keys_output_ok_is_true(self) -> None:
+        out = SendKeysOutput(surface_id="surface:abc")
+        assert out.ok is True
+
+    def test_notify_output_serializes_datetime(self) -> None:
+        out = NotifyOutput(notification_id="notification:xyz", created_at="2026-09-16T12:34:56Z")
+        assert "2026" in out.model_dump(mode="json")["created_at"]
+
+    def test_browser_navigate_output_truncated_flag(self) -> None:
+        out = BrowserNavigateOutput(
+            ok=True,
+            url="https://example.com",
+            snapshot=None,
+            truncated=True,
+        )
+        assert out.truncated is True
+
+    def test_browser_click_output_shape(self) -> None:
+        out = BrowserClickOutput(ok=True)
+        assert out.ok is True
+
+    def test_browser_tabs_output_order_preserved(self) -> None:
+        out = BrowserTabsOutput(
+            tabs=[
+                BrowserTab(id="t1", url="https://a.example", title="A", active=False),
+                BrowserTab(id="t2", url="https://b.example", title="B", active=True),
+            ]
+        )
+        assert [t.id for t in out.tabs] == ["t1", "t2"]
+
+    def test_browser_evaluate_error_result_error_kind_enum(self) -> None:
+        out = BrowserEvaluateErrorResult(
+            error="not serializable", error_kind="not_serializable"
+        )
+        assert out.error_kind == "not_serializable"
+        assert out.ok is False
+        assert out.result is None
+
+    def test_browser_evaluate_error_result_disallows_result_field(self) -> None:
+        # When ok=False, result must be None (discriminated union)
+        with pytest.raises(ValidationError):
+            BrowserEvaluateErrorResult(
+                error="x", error_kind="runtime_exception", result="should not be allowed"
+            )  # type: ignore[call-arg]
