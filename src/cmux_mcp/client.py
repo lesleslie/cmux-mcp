@@ -362,6 +362,11 @@ class CmuxCliTransport:
         self._binary_path = Path(binary_path)
         self._global_sem = asyncio.Semaphore(config.cli_max_concurrent)
         self._surface_locks: dict[str, asyncio.Lock] = {}
+        # Review finding H8: track refcount per surface_id so we can drop the
+        # asyncio.Lock entry when no in-flight calls reference it. Without
+        # this, browser test suites that spawn a fresh surface per navigation
+        # balloon _surface_locks unboundedly over the server lifetime.
+        self._surface_lock_refs: dict[str, int] = {}
         self._active = 0
         self._active_subprocesses: dict[int, asyncio.subprocess.Process] = {}
         self._subprocess_lock = asyncio.Lock()
@@ -379,13 +384,19 @@ class CmuxCliTransport:
         # Review finding H7: _active was incremented only on the non-surface path.
         # Move the counter outside the surface_id branch so all in-flight
         # subprocesses (surface-locked or not) feed BrowserCliFeedComponent.active_subprocesses.
+        # Review finding H8: acquire surface lock via _surface_lock_for which
+        # returns a release token; always call _release_surface_lock in the
+        # finally block to drop the refcount (and the lock when zero).
         async with self._global_sem:
             self._active += 1
             try:
                 if surface_id:
-                    lock = await self._surface_lock_for(surface_id)
+                    lock, token = await self._surface_lock_for(surface_id)
                     async with lock:
-                        return await self._invoke(full_args, timeout)
+                        try:
+                            return await self._invoke(full_args, timeout)
+                        finally:
+                            await self._release_surface_lock(token)
                 return await self._invoke(full_args, timeout)
             finally:
                 self._active -= 1
@@ -397,13 +408,41 @@ class CmuxCliTransport:
                 return args[i + 1]
         return None
 
-    async def _surface_lock_for(self, surface_id: str) -> asyncio.Lock:
+    async def _surface_lock_for(self, surface_id: str) -> tuple[asyncio.Lock, str]:
+        """Return (lock, release_token). Caller MUST call _release_surface_lock(token)
+        in a finally block to drop the refcount (and the lock itself when zero).
+
+        Review finding H8: without refcounting, every distinct surface_id
+        permanently retains an asyncio.Lock.
+        """
         async with self._lock_lock:
+            self._surface_lock_refs[surface_id] = self._surface_lock_refs.get(surface_id, 0) + 1
+            refcount = self._surface_lock_refs[surface_id]
             lock = self._surface_locks.get(surface_id)
             if lock is None:
                 lock = asyncio.Lock()
                 self._surface_locks[surface_id] = lock
-            return lock
+            return lock, (surface_id, refcount)
+
+    def _release_surface_lock(self, token: tuple[str, int]) -> None:
+        """Decrement refcount; drop the asyncio.Lock entry when zero.
+
+        Not async — no I/O. Caller must hold no _lock_lock while calling
+        (or re-acquire it; release path runs outside the locked region).
+        """
+        surface_id, observed_refcount = token
+        async def _drop() -> None:
+            async with self._lock_lock:
+                current = self._surface_lock_refs.get(surface_id, 0)
+                if current <= 1:
+                    self._surface_locks.pop(surface_id, None)
+                    self._surface_lock_refs.pop(surface_id, None)
+                elif current != observed_refcount:
+                    # Another caller added refs in between; don't drop theirs.
+                    pass
+                else:
+                    self._surface_lock_refs[surface_id] = current - 1
+        return _drop()
 
     async def _invoke(self, full_args: list[str], timeout: float | None) -> CliResult:
         proc = await asyncio.create_subprocess_exec(
