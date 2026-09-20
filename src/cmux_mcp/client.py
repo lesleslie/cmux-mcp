@@ -373,7 +373,8 @@ class CmuxCliTransport:
         surface_id = self._extract_surface_id(args)
         async with self._global_sem:
             if surface_id:
-                async with self._surface_lock_for(surface_id):
+                lock = await self._surface_lock_for(surface_id)
+                async with lock:
                     return await self._invoke(full_args, timeout)
             self._active += 1
             try:

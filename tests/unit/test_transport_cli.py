@@ -78,3 +78,59 @@ class TestConcurrencyLimits:
         transport._invoke = counting_invoke  # type: ignore[method-assign]
         await asyncio.gather(*[transport.call(["cmux"]) for _ in range(10)])
         assert max_active == 2
+
+
+@pytest.mark.unit
+class TestPerSurfaceLock:
+    @pytest.mark.asyncio
+    async def test_same_surface_calls_serialized(self) -> None:
+        """Two concurrent calls on the same surface must serialize via per-surface lock."""
+        config = CmuxMCPConfig(cli_max_concurrent=8)
+        transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
+        order: list[str] = []
+
+        # Patch _invoke so call()'s per-surface lock still applies. Identify
+        # each call by its surface_id (args[3] in the original positional layout).
+        async def tracking_invoke(args: list[str], *_a: object, **_kw: object) -> CliResult:
+            surface_id = CmuxCliTransport._extract_surface_id(args) or "?"
+            order.append(f"start:{surface_id}")
+            await asyncio.sleep(0.05)
+            order.append(f"end:{surface_id}")
+            return CliResult(ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0)
+
+        transport._invoke = tracking_invoke  # type: ignore[method-assign]
+        await asyncio.gather(
+            transport.call(["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]),
+            transport.call(["cmux", "browser", "--surface", "surface:abc", "click", "e1"]),
+        )
+        # Same surface: must be start,end,start,end (not interleaved)
+        assert order == [
+            "start:surface:abc", "end:surface:abc",
+            "start:surface:abc", "end:surface:abc",
+        ], f"Expected serialized execution; got {order}"
+
+    @pytest.mark.asyncio
+    async def test_different_surfaces_can_run_in_parallel(self) -> None:
+        """Two concurrent calls on different surfaces must run in parallel."""
+        config = CmuxMCPConfig(cli_max_concurrent=8)
+        transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
+        order: list[str] = []
+
+        async def tracking_invoke(args: list[str], *_a: object, **_kw: object) -> CliResult:
+            surface_id = CmuxCliTransport._extract_surface_id(args) or "?"
+            order.append(f"start:{surface_id}")
+            await asyncio.sleep(0.05)
+            order.append(f"end:{surface_id}")
+            return CliResult(ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0)
+
+        transport._invoke = tracking_invoke  # type: ignore[method-assign]
+        await asyncio.gather(
+            transport.call(["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]),
+            transport.call(["cmux", "browser", "--surface", "surface:xyz", "navigate", "u2"]),
+        )
+        # Different surfaces: must be interleaved (both starts before either end)
+        starts = sum(1 for e in order if e.startswith("start:"))
+        ends_before_any_start = sum(1 for i, e in enumerate(order) if e.startswith("end:") and i < 2)
+        assert starts == 2 and ends_before_any_start == 0, (
+            f"Expected parallel execution; got {order}"
+        )
