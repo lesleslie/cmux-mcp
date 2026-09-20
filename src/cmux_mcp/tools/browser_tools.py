@@ -11,11 +11,11 @@ Tasks 19-22 register all 7 tools:
 
 Each follows the try/except/else pattern per spec §"/health envelope wiring → Tool feed placement".
 """
+
 from __future__ import annotations
 
 import json
-import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from fastmcp.exceptions import ToolError
@@ -40,11 +40,12 @@ from cmux_mcp.models import (
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
     from cmux_mcp.client import CmuxCliTransportProtocol
     from cmux_mcp.health import ToolFeedComponent
 
 
-def _record(state: "ToolFeedComponent") -> None:
+def _record(state: ToolFeedComponent) -> None:
     state.record_cycle()
 
 
@@ -54,10 +55,16 @@ def _as_tool_error(exc: Exception) -> ToolError:
     See socket_tools.py for full rationale (review finding C6).
     """
     from cmux_mcp.errors import CmuxError
+
     if isinstance(exc, CmuxError):
         envelope = exc.to_tool_error()
     else:
-        envelope = {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+        envelope = {
+            "code": "internal_error",
+            "message": str(exc),
+            "retryable": False,
+            "data": None,
+        }
     return ToolError(json.dumps(envelope))
 
 
@@ -74,9 +81,9 @@ def _truncate(text: bytes, limit: int) -> tuple[bytes, bool]:
 
 
 def register_browser_tools(
-    mcp: "FastMCP",
-    cli: "CmuxCliTransportProtocol",
-    tool_feeds: dict[str, "ToolFeedComponent"],
+    mcp: FastMCP,
+    cli: CmuxCliTransportProtocol,
+    tool_feeds: dict[str, ToolFeedComponent],
 ) -> None:
     """Register the 7 browser CLI tools on the FastMCP instance."""
 
@@ -91,10 +98,19 @@ def register_browser_tools(
         snapshot_after: bool = False,
     ) -> BrowserNavigateOutput:
         from pydantic import HttpUrl
-        validated = BrowserNavigateInput(surface_id=surface_id, url=url, snapshot_after=snapshot_after)
+
+        validated = BrowserNavigateInput(
+            surface_id=surface_id, url=url, snapshot_after=snapshot_after
+        )
         state = tool_feeds["tool.cmux_browser_navigate"]
         state.record_cycle()
-        args = ["browser", "--surface", validated.surface_id, "navigate", str(validated.url)]
+        args = [
+            "browser",
+            "--surface",
+            validated.surface_id,
+            "navigate",
+            str(validated.url),
+        ]
         if validated.snapshot_after:
             args.append("--snapshot-after")
         try:
@@ -130,7 +146,11 @@ def register_browser_tools(
     @mcp.tool(
         name="cmux_browser_snapshot",
         description="Return the accessibility tree of the current page (Playwright-style refs).",
-        annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": True},
+        annotations={
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def cmux_browser_snapshot(surface_id: str) -> BrowserSnapshot:
         validated = BrowserSnapshotInput(surface_id=surface_id)
@@ -138,7 +158,13 @@ def register_browser_tools(
         state.record_cycle()
         try:
             cli_result = await cli.call(
-                ["browser", "--surface", validated.surface_id, "snapshot", "--interactive"],
+                [
+                    "browser",
+                    "--surface",
+                    validated.surface_id,
+                    "snapshot",
+                    "--interactive",
+                ],
             )
         except Exception as exc:
             state.record_error()
@@ -147,17 +173,23 @@ def register_browser_tools(
             state.record_success()
             return BrowserSnapshot(
                 snapshot=cli_result.stdout.decode("utf-8", errors="replace"),
-                captured_at=datetime.now(tz=timezone.utc),
+                captured_at=datetime.now(tz=UTC),
             )
 
     @mcp.tool(
         name="cmux_browser_tabs",
         description="List open tabs of the browser surface (read-only).",
-        annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": True},
+        annotations={
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def cmux_browser_tabs(surface_id: str) -> BrowserTabsOutput:
         import json
+
         from cmux_mcp.models import BrowserTab
+
         validated = BrowserTabsInput(surface_id=surface_id)
         state = tool_feeds["tool.cmux_browser_tabs"]
         state.record_cycle()
@@ -189,14 +221,23 @@ def register_browser_tools(
         await_promise: bool = False,
     ) -> BrowserEvaluateResult | BrowserEvaluateErrorResult:
         import json
+
         validated = BrowserEvaluateInput(
-            surface_id=surface_id, expression=expression, await_promise=await_promise,
+            surface_id=surface_id,
+            expression=expression,
+            await_promise=await_promise,
         )
         state = tool_feeds["tool.cmux_browser_evaluate"]
         state.record_cycle()
         # await_promise polling deferred (per spec §"await_promise semantics"); v1
         # passes the flag through to the CLI.
-        args = ["browser", "--surface", validated.surface_id, "eval", validated.expression]
+        args = [
+            "browser",
+            "--surface",
+            validated.surface_id,
+            "eval",
+            validated.expression,
+        ]
         if validated.await_promise:
             args.append("--await")
         try:
@@ -208,11 +249,17 @@ def register_browser_tools(
             state.record_error()
             stderr = cli_result.stderr.decode("utf-8", errors="replace")
             if "not serializable" in stderr.lower():
-                return BrowserEvaluateErrorResult(error=stderr, error_kind="not_serializable")
-            return BrowserEvaluateErrorResult(error=stderr, error_kind="runtime_exception")
+                return BrowserEvaluateErrorResult(
+                    error=stderr, error_kind="not_serializable"
+                )
+            return BrowserEvaluateErrorResult(
+                error=stderr, error_kind="runtime_exception"
+            )
         try:
             payload = json.loads(cli_result.stdout.decode("utf-8"))
-        except Exception:
+        except ValueError, TypeError:
+            # JSONDecodeError is a subclass of ValueError; pydantic
+            # ValidationError is also. TypeError covers NoneType.decode etc.
             state.record_error()
             return BrowserEvaluateErrorResult(
                 error=f"malformed eval output: {cli_result.stdout!r}",
@@ -231,10 +278,18 @@ def register_browser_tools(
         selector: str,
         snapshot_after: bool = False,
     ) -> BrowserClickOutput:
-        validated = BrowserClickInput(surface_id=surface_id, selector=selector, snapshot_after=snapshot_after)
+        validated = BrowserClickInput(
+            surface_id=surface_id, selector=selector, snapshot_after=snapshot_after
+        )
         state = tool_feeds["tool.cmux_browser_click"]
         state.record_cycle()
-        args = ["browser", "--surface", validated.surface_id, "click", validated.selector]
+        args = [
+            "browser",
+            "--surface",
+            validated.surface_id,
+            "click",
+            validated.selector,
+        ]
         if validated.snapshot_after:
             args.append("--snapshot-after")
         try:
@@ -260,10 +315,20 @@ def register_browser_tools(
         # Spec §"Tool surface" mandates BrowserTypeOutput (just {ok: True});
         # using BrowserClickOutput here would leak a 'snapshot' field that
         # strict-schema consumers don't expect (review finding H3).
-        validated = BrowserTypeInput(surface_id=surface_id, selector=selector, text=text, submit=submit)
+        validated = BrowserTypeInput(
+            surface_id=surface_id, selector=selector, text=text, submit=submit
+        )
         state = tool_feeds["tool.cmux_browser_type"]
         state.record_cycle()
-        args = ["browser", "--surface", validated.surface_id, "fill", validated.selector, "--text", validated.text]
+        args = [
+            "browser",
+            "--surface",
+            validated.surface_id,
+            "fill",
+            validated.selector,
+            "--text",
+            validated.text,
+        ]
         if validated.submit:
             args.append("--submit")
         try:
@@ -278,7 +343,11 @@ def register_browser_tools(
     @mcp.tool(
         name="cmux_browser_console",
         description="Read console messages and JS errors from the browser surface.",
-        annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": True},
+        annotations={
+            "readOnlyHint": True,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def cmux_browser_console(
         surface_id: str,
@@ -288,16 +357,24 @@ def register_browser_tools(
     ) -> BrowserConsoleResult:
         import asyncio
         import json
+
         from cmux_mcp.models import BrowserError, ConsoleMessage
-        validated = BrowserConsoleInput(surface_id=surface_id, limit=limit, level=level, since=since)
+
+        validated = BrowserConsoleInput(
+            surface_id=surface_id, limit=limit, level=level, since=since
+        )
         state = tool_feeds["tool.cmux_browser_console"]
         state.record_cycle()
         # Aggregate two sub-calls per spec §"Tool 12". Use gather with return_exceptions
         # so partial failure becomes empty list + flag (per spec).
         try:
             results = await asyncio.gather(
-                cli.call(["browser", "--surface", validated.surface_id, "console", "list"]),
-                cli.call(["browser", "--surface", validated.surface_id, "errors", "list"]),
+                cli.call(
+                    ["browser", "--surface", validated.surface_id, "console", "list"]
+                ),
+                cli.call(
+                    ["browser", "--surface", validated.surface_id, "errors", "list"]
+                ),
                 return_exceptions=True,
             )
         except Exception as exc:
@@ -316,7 +393,9 @@ def register_browser_tools(
             try:
                 raw = json.loads(console_result.stdout.decode("utf-8"))
                 messages = [ConsoleMessage(**m) for m in raw]
-            except Exception:
+            except ValueError, TypeError:
+                # JSONDecodeError + pydantic ValidationError (subclasses of
+                # ValueError) + NoneType.decode (TypeError) all funnel here.
                 partial_failure = True
                 failed_subcalls.append("console_list")
         if isinstance(errors_result, Exception):
@@ -326,7 +405,9 @@ def register_browser_tools(
             try:
                 raw = json.loads(errors_result.stdout.decode("utf-8"))
                 errors = [BrowserError(**e) for e in raw]
-            except Exception:
+            except ValueError, TypeError:
+                # JSONDecodeError + pydantic ValidationError (subclasses of
+                # ValueError) + NoneType.decode (TypeError) all funnel here.
                 partial_failure = True
                 failed_subcalls.append("errors_list")
         return BrowserConsoleResult(

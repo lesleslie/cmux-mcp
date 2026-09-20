@@ -17,6 +17,7 @@ Each exception carries:
 
 to_tool_error() converts to the ToolError envelope shape used by all 12 tools.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -72,7 +73,9 @@ class CmuxOnlyAccessDeniedError(CmuxError):
 
     _RECOVERY_HINT = "Re-run 'cmux-mcp start' from a cmux terminal pane."
 
-    def __init__(self, message: str = "cmux socket access denied (cmuxOnly mode)", **kw: Any) -> None:
+    def __init__(
+        self, message: str = "cmux socket access denied (cmuxOnly mode)", **kw: Any
+    ) -> None:
         super().__init__(f"{message} {self._RECOVERY_HINT}", retryable=False, **kw)
 
 
@@ -81,7 +84,11 @@ class UnsupportedPlatformError(CmuxError):
 
     tool_error_code = "unsupported_platform"
 
-    def __init__(self, message: str = "cmux-mcp requires macOS; set CMUX_MCP_MOCK=1 for Linux/Windows CI", **kw: Any) -> None:
+    def __init__(
+        self,
+        message: str = "cmux-mcp requires macOS; set CMUX_MCP_MOCK=1 for Linux/Windows CI",
+        **kw: Any,
+    ) -> None:
         super().__init__(message, retryable=False, **kw)
 
 
@@ -116,7 +123,9 @@ class CmuxSocketEofReconnectingError(CmuxError):
 
     tool_error_code = "cmux_socket_eof_reconnecting"
 
-    def __init__(self, message: str = "cmux socket EOF; reconnecting", **kw: Any) -> None:
+    def __init__(
+        self, message: str = "cmux socket EOF; reconnecting", **kw: Any
+    ) -> None:
         super().__init__(message, retryable=True, **kw)
 
 
@@ -128,7 +137,9 @@ class CmuxSocketMaxRetriesExceededError(CmuxError):
 
     tool_error_code = "cmux_socket_max_retries_exceeded"
 
-    def __init__(self, message: str = "cmux socket unreachable: max retries exceeded", **kw: Any) -> None:
+    def __init__(
+        self, message: str = "cmux socket unreachable: max retries exceeded", **kw: Any
+    ) -> None:
         super().__init__(message, retryable=False, **kw)
 
 
@@ -168,24 +179,26 @@ class RateLimitedError(CmuxError):
 
     tool_error_code = "rate_limited"
 
-    def __init__(self, message: str = "rate limit exceeded; retry after backoff", **kw: Any) -> None:
+    def __init__(
+        self, message: str = "rate limit exceeded; retry after backoff", **kw: Any
+    ) -> None:
         super().__init__(message, retryable=True, **kw)
 
 
 __all__ = [
+    "BrowserEvalRuntimeError",
+    "BrowserSelectorNotFoundError",
+    "CmuxBinaryNotFoundError",
+    "CmuxCliFailedError",
     "CmuxError",
-    "CmuxTransportError",
+    "CmuxOnlyAccessDeniedError",
+    "CmuxProtocolError",
     "CmuxSocketEofReconnectingError",
     "CmuxSocketMaxRetriesExceededError",
     "CmuxTimeoutError",
-    "CmuxCliFailedError",
-    "CmuxOnlyAccessDeniedError",
-    "UnsupportedPlatformError",
-    "CmuxBinaryNotFoundError",
-    "CmuxProtocolError",
+    "CmuxTransportError",
     "CmuxValidationError",
-    "BrowserEvalRuntimeError",
-    "BrowserSelectorNotFoundError",
-    "SurfaceNotFoundError",
     "RateLimitedError",
+    "SurfaceNotFoundError",
+    "UnsupportedPlatformError",
 ]

@@ -5,6 +5,7 @@ Per spec §"Architecture" and §"Transport layer details":
   CmuxCliTransport    — single-shot subprocess, semaphore + per-surface lock
   CmuxMockTransport   — implements both Protocol shapes for test isolation
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -14,14 +15,18 @@ import random
 import signal as _signal
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol, Sequence
+from typing import Literal, Protocol
 
 import yaml
+from oneiric.core.logging import get_logger
 
 from cmux_mcp.config import CmuxMCPConfig
 from cmux_mcp.errors import CmuxProtocolError, CmuxTimeoutError, CmuxTransportError
+
+_LOGGER = get_logger(__name__)
 
 
 @dataclass
@@ -91,7 +96,9 @@ class CmuxMockTransport:
 
     def add_response(self, method: str, params: dict | None, response: dict) -> None:
         """Register an extra canned response (per-test override)."""
-        self._extra_responses.append({"method": method, "params": params or {}, "response": response})
+        self._extra_responses.append(
+            {"method": method, "params": params or {}, "response": response}
+        )
 
     async def request(
         self,
@@ -104,10 +111,14 @@ class CmuxMockTransport:
             if _match_fixture(entry, method, params):
                 response = entry["response"]
                 if "error" in response:
-                    raise CmuxProtocolError(response["error"].get("message", "cmux error"))
+                    raise CmuxProtocolError(
+                        response["error"].get("message", "cmux error")
+                    )
                 # Mirror CmuxSocketTransport.request: return inner `result`, not envelope.
                 return response["result"]
-        raise CmuxProtocolError(f"mock: no canned response for method={method!r} params={params!r}")
+        raise CmuxProtocolError(
+            f"mock: no canned response for method={method!r} params={params!r}"
+        )
 
     async def call(
         self,
@@ -138,13 +149,13 @@ class CmuxMockTransport:
 
 
 __all__ = [
+    "SUBPROCESS_ENV_ALLOWLIST",
     "CliResult",
-    "CmuxSocketTransportProtocol",
+    "CmuxCliTransport",
     "CmuxCliTransportProtocol",
     "CmuxMockTransport",
     "CmuxSocketTransport",
-    "CmuxCliTransport",
-    "SUBPROCESS_ENV_ALLOWLIST",
+    "CmuxSocketTransportProtocol",
 ]
 
 
@@ -173,7 +184,9 @@ class CmuxSocketTransport:
         self._config = config
         self._reader = reader
         self._writer = writer
-        self._state: Literal["connected", "reconnecting", "disconnected"] = "disconnected"
+        self._state: Literal["connected", "reconnecting", "disconnected"] = (
+            "disconnected"
+        )
         self._lock = asyncio.Lock()
         self._next_id = 1
         self._session_epoch = str(uuid.uuid4())
@@ -182,7 +195,7 @@ class CmuxSocketTransport:
         self._reconnect_task: asyncio.Task[None] | None = None
 
     @classmethod
-    async def connect(cls, config: CmuxMCPConfig) -> "CmuxSocketTransport":
+    async def connect(cls, config: CmuxMCPConfig) -> CmuxSocketTransport:
         """Open socket; on failure, transition to "reconnecting" with background retry.
 
         Differs from the plan's strict-raise-on-failure: production cmux-mcp may
@@ -193,7 +206,9 @@ class CmuxSocketTransport:
             await transport._open()
         except CmuxTransportError:
             transport._state = "reconnecting"
-            transport._reconnect_task = asyncio.create_task(transport._reconnect_with_backoff())
+            transport._reconnect_task = asyncio.create_task(
+                transport._reconnect_with_backoff()
+            )
         return transport
 
     @property
@@ -229,7 +244,7 @@ class CmuxSocketTransport:
                 # id may be int (correlator key) or str (from cmux); coerce.
                 try:
                     fut_key = int(req_id)
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     continue
                 fut = self._pending.pop(fut_key, None)
                 if fut is not None and not fut.done():
@@ -241,7 +256,7 @@ class CmuxSocketTransport:
                         )
                     else:
                         fut.set_result(payload.get("result", {}))
-        except (EOFError, asyncio.IncompleteReadError, json.JSONDecodeError):
+        except EOFError, asyncio.IncompleteReadError, json.JSONDecodeError:
             # Review finding H9: a single corrupt JSON frame from cmux would
             # kill the reader task. EOF + IncompleteReadError + JSONDecodeError
             # all funnel into the same recovery path: reconnect with backoff.
@@ -253,7 +268,7 @@ class CmuxSocketTransport:
         while attempt < self._config.reconnect_max_attempts:
             delay = min(
                 self._config.reconnect_max_delay_seconds,
-                self._config.reconnect_initial_delay_seconds * (2 ** attempt),
+                self._config.reconnect_initial_delay_seconds * (2**attempt),
             )
             # Full jitter: random.uniform(0, 1) per AWS Architecture Blog.
             # Real production jitter; tests can override `reconnect_initial_delay_seconds`
@@ -264,7 +279,7 @@ class CmuxSocketTransport:
             try:
                 await self._open()
                 return
-            except (OSError, FileNotFoundError, CmuxTransportError):
+            except OSError, FileNotFoundError, CmuxTransportError:
                 continue
         self._state = "disconnected"
 
@@ -282,7 +297,9 @@ class CmuxSocketTransport:
         not connected.
         """
         if self._state != "connected":
-            raise CmuxTransportError(f"socket state is {self._state!r}, cannot send request")
+            raise CmuxTransportError(
+                f"socket state is {self._state!r}, cannot send request"
+            )
         async with self._lock:
             req_id = self._next_id
             self._next_id += 1
@@ -303,7 +320,7 @@ class CmuxSocketTransport:
                 fut,
                 timeout=timeout or self._config.socket_short_timeout_seconds,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             self._pending.pop(req_id, None)
             raise CmuxTimeoutError(f"request timed out: method={method!r}") from exc
 
@@ -321,8 +338,17 @@ class CmuxSocketTransport:
             self._writer.close()
             try:
                 await self._writer.wait_closed()
-            except Exception:
-                pass
+            except ConnectionResetError, OSError, TypeError:
+                # asyncio StreamWriter.wait_closed() can raise if the
+                # underlying transport is already torn down (peer reset,
+                # half-closed socket, etc.) — expected during shutdown.
+                # TypeError is also caught because test mocks (MagicMock)
+                # don't make `wait_closed` an awaitable; in production this
+                # path only fires for actual socket teardown races.
+                _LOGGER.debug(
+                    "wait_closed on shutdown raised (ignored)",
+                    extra={"socket_path": str(self._config.socket_path)},
+                )
         self._state = "disconnected"
 
 
@@ -334,9 +360,20 @@ class CmuxSocketTransport:
 # MINIMAX_API_KEY, MAHAVISHNU_AUTH_SECRET) is filtered out. Per spec §"Subprocess env".
 SUBPROCESS_ENV_ALLOWLIST: frozenset[str] = frozenset(
     {
-        "PATH", "LANG", "LC_ALL", "LC_COLLATE", "LC_CTYPE", "LC_MONETARY",
-        "LC_NUMERIC", "LC_TIME", "TMPDIR", "USER", "HOME",
-        "CMUX_SOCKET_PATH", "CMUX_SURFACE_ID", "CMUX_WORKSPACE_ID",
+        "PATH",
+        "LANG",
+        "LC_ALL",
+        "LC_COLLATE",
+        "LC_CTYPE",
+        "LC_MONETARY",
+        "LC_NUMERIC",
+        "LC_TIME",
+        "TMPDIR",
+        "USER",
+        "HOME",
+        "CMUX_SOCKET_PATH",
+        "CMUX_SURFACE_ID",
+        "CMUX_WORKSPACE_ID",
     }
 )
 
@@ -416,7 +453,9 @@ class CmuxCliTransport:
         permanently retains an asyncio.Lock.
         """
         async with self._lock_lock:
-            self._surface_lock_refs[surface_id] = self._surface_lock_refs.get(surface_id, 0) + 1
+            self._surface_lock_refs[surface_id] = (
+                self._surface_lock_refs.get(surface_id, 0) + 1
+            )
             refcount = self._surface_lock_refs[surface_id]
             lock = self._surface_locks.get(surface_id)
             if lock is None:
@@ -431,6 +470,7 @@ class CmuxCliTransport:
         (or re-acquire it; release path runs outside the locked region).
         """
         surface_id, observed_refcount = token
+
         async def _drop() -> None:
             async with self._lock_lock:
                 current = self._surface_lock_refs.get(surface_id, 0)
@@ -442,6 +482,7 @@ class CmuxCliTransport:
                     pass
                 else:
                     self._surface_lock_refs[surface_id] = current - 1
+
         return _drop()
 
     async def _invoke(self, full_args: list[str], timeout: float | None) -> CliResult:
@@ -459,7 +500,7 @@ class CmuxCliTransport:
                 proc.communicate(),
                 timeout=timeout or self._config.cli_timeout_seconds,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise CmuxTimeoutError(f"cmux CLI timeout: args={full_args!r}") from exc
         finally:
             if proc.returncode is None:
@@ -480,7 +521,7 @@ class CmuxCliTransport:
         proc.send_signal(_signal.SIGTERM)
         try:
             await asyncio.wait_for(proc.wait(), timeout=1.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.send_signal(_signal.SIGKILL)
             await proc.wait()
 

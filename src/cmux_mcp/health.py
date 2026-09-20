@@ -11,13 +11,15 @@ ergonomics tools need (mcp-common's record_success / record_error are mutator
 helpers that don't track cycles_total or errors_total — per docstring, the caller
 is responsible for those counters).
 """
+
 from __future__ import annotations
 
 import time
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
-from mcp_common.health.feed import HealthFeedState, record_error as _mcp_record_error
+from mcp_common.health.feed import HealthFeedState
+from mcp_common.health.feed import record_error as _mcp_record_error
 from mcp_common.health.feed import record_success as _mcp_record_success
 
 if TYPE_CHECKING:
@@ -57,7 +59,7 @@ class _Feed:
 
 
 class SocketFeedComponent(_Feed):
-    def __init__(self, transport: "CmuxSocketTransport") -> None:
+    def __init__(self, transport: CmuxSocketTransport) -> None:
         super().__init__(name="cmux_socket")
         self._transport = transport
 
@@ -68,7 +70,7 @@ class SocketFeedComponent(_Feed):
 
 
 class BrowserCliFeedComponent(_Feed):
-    def __init__(self, transport: "CmuxCliTransport") -> None:
+    def __init__(self, transport: CmuxCliTransport) -> None:
         super().__init__(name="browser_cli")
         self._transport = transport
 
@@ -110,9 +112,9 @@ def build_tool_feed_components() -> list[ToolFeedComponent]:
 
 __all__ = [
     "TOOL_NAMES",
-    "ToolFeedComponent",
-    "SocketFeedComponent",
     "BrowserCliFeedComponent",
     "MockTransportComponent",
+    "SocketFeedComponent",
+    "ToolFeedComponent",
     "build_tool_feed_components",
 ]

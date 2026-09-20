@@ -9,6 +9,7 @@ Per spec §"cmux CLI binary discovery":
   6. ~/Library/Developer/Xcode/DerivedData/cmux-*/Build/Products/{Debug,Release}/cmux.app/.../bin/cmux
   7. fail with CmuxBinaryNotFoundError listing probed paths
 """
+
 from __future__ import annotations
 
 import os
@@ -37,17 +38,29 @@ def _candidate_paths() -> list[Path]:
             # Numeric tuple sort so "10.0.0" sorts after "2.0.0".
             versions = sorted(
                 (p for p in caskroom.iterdir() if p.is_dir()),
-                key=lambda p: tuple(int(x) if x.isdigit() else 0 for x in p.name.split(".")),
+                key=lambda p: tuple(
+                    int(x) if x.isdigit() else 0 for x in p.name.split(".")
+                ),
                 reverse=True,
             )
             for v in versions:
-                candidates.append(v / "cmux.app" / "Contents" / "Resources" / "bin" / "cmux")
+                candidates.append(
+                    v / "cmux.app" / "Contents" / "Resources" / "bin" / "cmux"
+                )
     derived = Path.home() / "Library" / "Developer" / "Xcode" / "DerivedData"
     if derived.exists():
-        for d in derived.glob("cmux-*/Build/Products/Debug/cmux.app/Contents/Resources/bin/cmux"):
-            candidates.append(d)
-        for d in derived.glob("cmux-*/Build/Products/Release/cmux.app/Contents/Resources/bin/cmux"):
-            candidates.append(d)
+        # PERF402: candidates.extend(glob(...)) beats `for d in glob: append`
+        # — single C-level call instead of N Python appends.
+        candidates.extend(
+            derived.glob(
+                "cmux-*/Build/Products/Debug/cmux.app/Contents/Resources/bin/cmux"
+            ),
+        )
+        candidates.extend(
+            derived.glob(
+                "cmux-*/Build/Products/Release/cmux.app/Contents/Resources/bin/cmux"
+            ),
+        )
     return candidates
 
 

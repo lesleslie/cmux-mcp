@@ -1,4 +1,5 @@
 """Tests for cmux_mcp/logging_setup.py — mock-mode WARN banner + PII helpers."""
+
 from __future__ import annotations
 
 import os
@@ -57,7 +58,9 @@ class TestMockModeBanner:
 @pytest.mark.unit
 class TestRedaction:
     def test_redact_url_strips_query(self) -> None:
-        redacted = redact_url_query_string("https://api.example.com/v1?token=abc&api_key=xyz")
+        redacted = redact_url_query_string(
+            "https://api.example.com/v1?token=abc&api_key=xyz"
+        )
         assert "token" not in redacted
         assert "api_key" not in redacted
         assert redacted.startswith("https://api.example.com/v1")

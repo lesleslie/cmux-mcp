@@ -1,4 +1,5 @@
 """Tests for CmuxMockTransport — fixture-driven canned responses."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,7 +8,7 @@ import pytest
 import yaml
 
 from cmux_mcp.client import CliResult, CmuxMockTransport
-
+from cmux_mcp.errors import CmuxProtocolError
 
 FIXTURE_PATH = Path(__file__).parent.parent / "fixtures" / "cmux_responses.yaml"
 
@@ -26,7 +27,7 @@ class TestMockTransportSocket:
     @pytest.mark.asyncio
     async def test_unknown_method_raises_protocol_error(self) -> None:
         transport = CmuxMockTransport(fixture_path=FIXTURE_PATH)
-        with pytest.raises(Exception):  # CmuxProtocolError
+        with pytest.raises(CmuxProtocolError):
             await transport.request("workspace.unknown")
 
 

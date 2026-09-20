@@ -1,9 +1,9 @@
 """Tests for CmuxSocketTransport — connection + state machine."""
+
 from __future__ import annotations
 
 import asyncio
 import json
-import warnings
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -45,7 +45,9 @@ class TestConnectionLifecycle:
         mock_writer.drain = AsyncMock()
         mock_writer.wait_closed = AsyncMock()
 
-        async def fake_open(*_args: object, **_kwargs: object) -> tuple[MagicMock, MagicMock]:
+        async def fake_open(
+            *_args: object, **_kwargs: object
+        ) -> tuple[MagicMock, MagicMock]:
             return (mock_reader, mock_writer)
 
         with patch("asyncio.open_unix_connection", side_effect=fake_open):
@@ -115,7 +117,9 @@ class TestJsonRpcCorrelation:
         mock_writer.write = write
         mock_writer.drain = async_drain
 
-        async def fake_open(*_args: object, **_kwargs: object) -> tuple[MagicMock, MagicMock]:
+        async def fake_open(
+            *_args: object, **_kwargs: object
+        ) -> tuple[MagicMock, MagicMock]:
             return (mock_reader, mock_writer)
 
         with patch("asyncio.open_unix_connection", side_effect=fake_open):

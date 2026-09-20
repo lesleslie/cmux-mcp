@@ -6,6 +6,7 @@ Per spec §"Server class":
   - shutdown() closes transports, captures shutdown snapshot
   - get_app() returns the FastMCP HTTP app
 """
+
 from __future__ import annotations
 
 import atexit
@@ -18,6 +19,7 @@ from mcp_common.server import BaseOneiricServerMixin
 from starlette.responses import JSONResponse
 
 from cmux_mcp import __version__
+from cmux_mcp._tools import register_tools
 from cmux_mcp.client import CmuxCliTransport, CmuxMockTransport, CmuxSocketTransport
 from cmux_mcp.config import CmuxMCPConfig
 from cmux_mcp.health import (
@@ -27,7 +29,6 @@ from cmux_mcp.health import (
     build_tool_feed_components,
 )
 from cmux_mcp.logging_setup import maybe_warn_mock_mode
-from cmux_mcp._tools import register_tools
 
 
 def acquire_pid_file(path: Path) -> None:
@@ -56,7 +57,7 @@ def acquire_pid_file(path: Path) -> None:
             raise RuntimeError(
                 f"PID file {path} is held by live process {existing_pid}"
             )
-        except (ProcessLookupError, ValueError, PermissionError):
+        except ProcessLookupError, ValueError, PermissionError:
             # ProcessLookupError: PID dead.
             # ValueError: malformed PID text.
             # PermissionError: PID alive but owned by another user (cannot kill -0).
@@ -105,6 +106,7 @@ class CmuxMCPServer(BaseOneiricServerMixin):
         else:
             self.socket_transport = await CmuxSocketTransport.connect(self.config)
             from cmux_mcp.cli_discovery import discover_cmux_cli
+
             cli_path = self.config.cmux_cli_path or discover_cmux_cli()
             self.cli_transport = CmuxCliTransport(self.config, binary_path=cli_path)
 
@@ -133,12 +135,18 @@ class CmuxMCPServer(BaseOneiricServerMixin):
         # startup completes successfully but tools/list returns {"tools":[]}.
         # This call MUST run after transport + tool-feed init (the tools
         # capture the transports and feed components in their closures).
-        register_tools(self.mcp, self.socket_transport, self.cli_transport, self._tool_feeds)
+        register_tools(
+            self.mcp, self.socket_transport, self.cli_transport, self._tool_feeds
+        )
 
-        await self._create_startup_snapshot(custom_components={
-            "cmux_socket": self.socket_transport.state if hasattr(self.socket_transport, "state") else "n/a",
-            "cmux_cli": str(getattr(self.cli_transport, "_binary_path", "n/a")),
-        })
+        await self._create_startup_snapshot(
+            custom_components={
+                "cmux_socket": self.socket_transport.state
+                if hasattr(self.socket_transport, "state")
+                else "n/a",
+                "cmux_cli": str(getattr(self.cli_transport, "_binary_path", "n/a")),
+            }
+        )
 
     async def shutdown(self) -> None:
         if self.cli_transport:
@@ -166,6 +174,7 @@ class CmuxMCPServer(BaseOneiricServerMixin):
         mean "degraded") to the per-feed snapshot.
         """
         from starlette.requests import Request
+
         config = self.config
         components = self._health_components
         startup_at = self._health_startup_at

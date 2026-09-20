@@ -2,6 +2,7 @@
 
 Per spec §"Pydantic models → Domain models" + §"Browser models".
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -15,7 +16,9 @@ from pydantic import BaseModel, Field, HttpUrl, model_validator
 # PEP 695 `type` statement (Python 3.12+) is required so Pydantic v2.13 can
 # resolve the recursion statically without the string-quoted forward reference
 # trick that older Python required.
-type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
+type JsonValue = (
+    str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
+)
 
 # Regex patterns (per spec §"Security → Input validation")
 SURFACE_ID_PATTERN = r"^surface:[a-zA-Z0-9_-]+$"
@@ -115,7 +118,9 @@ class BrowserConsoleResult(BaseModel):
     messages: list[ConsoleMessage]
     errors: list[BrowserError]
     truncated: bool = False
-    partial_failure: bool = False  # True if one of console list / errors list sub-call failed
+    partial_failure: bool = (
+        False  # True if one of console list / errors list sub-call failed
+    )
     failed_subcalls: list[Literal["console_list", "errors_list"]] = []
 
 
@@ -129,17 +134,41 @@ class SendKeysInput(BaseModel):
 
     surface_id: Annotated[str, Field(pattern=SURFACE_ID_PATTERN)]
     text: str | None = None
-    key: Literal[
-        "enter", "tab", "escape", "backspace", "delete",
-        "up", "down", "left", "right", "home", "end",
-        "pageup", "pagedown",
-        "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8",
-        "f9", "f10", "f11", "f12",
-        "space", "return",
-    ] | None = None
+    key: (
+        Literal[
+            "enter",
+            "tab",
+            "escape",
+            "backspace",
+            "delete",
+            "up",
+            "down",
+            "left",
+            "right",
+            "home",
+            "end",
+            "pageup",
+            "pagedown",
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5",
+            "f6",
+            "f7",
+            "f8",
+            "f9",
+            "f10",
+            "f11",
+            "f12",
+            "space",
+            "return",
+        ]
+        | None
+    ) = None
 
     @model_validator(mode="after")
-    def _exactly_one_of_text_or_key(self) -> "SendKeysInput":
+    def _exactly_one_of_text_or_key(self) -> SendKeysInput:
         if (self.text is None) == (self.key is None):
             raise ValueError("send_keys requires exactly one of text or key")
         return self
@@ -278,46 +307,43 @@ class BrowserTabsOutput(BaseModel):
     tabs: list[BrowserTab]
 
 
+# UPPER_SNAKE_CASE constants first (RUF022 groups them at the top), then
+# model classes sorted by ASCII byte order.
 __all__ = [
-    # ID patterns
-    "SURFACE_ID_PATTERN",
-    "PANE_ID_PATTERN",
-    "WORKSPACE_ID_PATTERN",
     "NOTIFICATION_ID_PATTERN",
-    # Domain
-    "SurfaceKind",
-    "Surface",
-    "Pane",
-    "Workspace",
-    "Notification",
-    # Browser
+    "PANE_ID_PATTERN",
+    "SURFACE_ID_PATTERN",
+    "WORKSPACE_ID_PATTERN",
+    "BrowserClickInput",
+    "BrowserClickOutput",
+    "BrowserConsoleInput",
+    "BrowserConsoleResult",
+    "BrowserError",
+    "BrowserEvaluateErrorResult",
+    "BrowserEvaluateInput",
+    "BrowserEvaluateResult",
+    "BrowserNavigateInput",
+    "BrowserNavigateOutput",
     "BrowserSnapshot",
+    "BrowserSnapshotInput",
+    "BrowserTab",
+    "BrowserTabsInput",
+    "BrowserTabsOutput",
+    "BrowserTypeInput",
+    "BrowserTypeOutput",
     "ConsoleLevel",
     "ConsoleMessage",
-    "BrowserTab",
-    "BrowserError",
-    "BrowserConsoleResult",
-    # Tool inputs
-    "SendKeysInput",
-    "NotifyInput",
-    "BrowserNavigateInput",
-    "BrowserSnapshotInput",
-    "BrowserEvaluateInput",
-    "BrowserClickInput",
-    "BrowserTypeInput",
-    "BrowserTabsInput",
-    "BrowserConsoleInput",
-    # Tool outputs
-    "JsonValue",
-    "ListWorkspacesOutput",
-    "ListNotificationsOutput",
     "IdentifyOutput",
-    "SendKeysOutput",
+    "JsonValue",
+    "ListNotificationsOutput",
+    "ListWorkspacesOutput",
+    "Notification",
+    "NotifyInput",
     "NotifyOutput",
-    "BrowserNavigateOutput",
-    "BrowserEvaluateResult",
-    "BrowserEvaluateErrorResult",
-    "BrowserClickOutput",
-    "BrowserTypeOutput",
-    "BrowserTabsOutput",
+    "Pane",
+    "SendKeysInput",
+    "SendKeysOutput",
+    "Surface",
+    "SurfaceKind",
+    "Workspace",
 ]

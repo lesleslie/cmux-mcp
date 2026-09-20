@@ -1,4 +1,5 @@
 """Tests for src/cmux_mcp/errors.py — the CmuxError hierarchy."""
+
 from __future__ import annotations
 
 import pytest
@@ -30,7 +31,9 @@ class TestCmuxErrorHierarchy:
             CmuxProtocolError,
             CmuxValidationError,
         ):
-            assert issubclass(cls, CmuxError), f"{cls.__name__} must inherit from CmuxError"
+            assert issubclass(cls, CmuxError), (
+                f"{cls.__name__} must inherit from CmuxError"
+            )
 
     def test_cmux_error_carries_context(self) -> None:
         exc = CmuxTransportError("socket eof", context={"surface_id": "surface:abc"})

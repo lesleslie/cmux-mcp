@@ -1,4 +1,5 @@
 """cmux-mcp entry point."""
+
 from __future__ import annotations
 
 from mcp_common.cli import MCPServerCLIFactory

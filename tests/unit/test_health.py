@@ -1,4 +1,5 @@
 """Tests for cmux_mcp/health.py — /health feed components."""
+
 from __future__ import annotations
 
 import pytest
@@ -61,11 +62,17 @@ class TestHealthComponents:
         assert len(feeds) == 12
         names = {f.name for f in feeds}
         expected = {
-            "tool.cmux_list_workspaces", "tool.cmux_list_notifications",
-            "tool.cmux_identify", "tool.cmux_send_keys", "tool.cmux_notify",
-            "tool.cmux_browser_navigate", "tool.cmux_browser_snapshot",
-            "tool.cmux_browser_evaluate", "tool.cmux_browser_click",
-            "tool.cmux_browser_type", "tool.cmux_browser_tabs",
+            "tool.cmux_list_workspaces",
+            "tool.cmux_list_notifications",
+            "tool.cmux_identify",
+            "tool.cmux_send_keys",
+            "tool.cmux_notify",
+            "tool.cmux_browser_navigate",
+            "tool.cmux_browser_snapshot",
+            "tool.cmux_browser_evaluate",
+            "tool.cmux_browser_click",
+            "tool.cmux_browser_type",
+            "tool.cmux_browser_tabs",
             "tool.cmux_browser_console",
         }
         assert names == expected

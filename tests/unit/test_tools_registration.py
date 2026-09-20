@@ -4,6 +4,7 @@ Per plan: Task 17 registers 1 stub tool as proof of wiring. Task 18
 registers the remaining 4 socket tools (5 total). Tasks 19-22 register
 the 7 browser tools (12 total). Test assertions bump in lockstep.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -36,10 +37,17 @@ class TestToolRegistration:
         assert len(tools) == 12
         names = {t.name for t in tools}
         expected = {
-            "cmux_list_workspaces", "cmux_list_notifications", "cmux_identify",
-            "cmux_send_keys", "cmux_notify",
-            "cmux_browser_navigate", "cmux_browser_snapshot", "cmux_browser_evaluate",
-            "cmux_browser_click", "cmux_browser_type", "cmux_browser_tabs",
+            "cmux_list_workspaces",
+            "cmux_list_notifications",
+            "cmux_identify",
+            "cmux_send_keys",
+            "cmux_notify",
+            "cmux_browser_navigate",
+            "cmux_browser_snapshot",
+            "cmux_browser_evaluate",
+            "cmux_browser_click",
+            "cmux_browser_type",
+            "cmux_browser_tabs",
             "cmux_browser_console",
         }
         assert names == expected

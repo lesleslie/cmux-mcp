@@ -1,4 +1,5 @@
 """Tests for the 7 browser CLI tools."""
+
 from __future__ import annotations
 
 import json
@@ -42,8 +43,12 @@ async def _invoke(mcp: FastMCP, name: str, **kwargs: object) -> object:
 
 def _ok_cli(stdout: bytes = b"", stderr: bytes = b"") -> AsyncMock:
     """AsyncMock returning ok CliResult with the given stdout/stderr."""
+
     async def fake_call(args, *, timeout=None):
-        return CliResult(ok=True, stdout=stdout, stderr=stderr, returncode=0, duration_ms=10)
+        return CliResult(
+            ok=True, stdout=stdout, stderr=stderr, returncode=0, duration_ms=10
+        )
+
     return AsyncMock(side_effect=fake_call)
 
 
@@ -56,8 +61,10 @@ class TestCmuxBrowserNavigate:
         mcp = FastMCP(name="test")
         register_browser_tools(mcp, mock_cli, feeds)
         result = await _invoke(
-            mcp, "cmux_browser_navigate",
-            surface_id="surface:abc", url="https://example.com",
+            mcp,
+            "cmux_browser_navigate",
+            surface_id="surface:abc",
+            url="https://example.com",
         )
         assert isinstance(result, BrowserNavigateOutput)
         assert str(result.url) == "https://example.com/"
@@ -80,8 +87,10 @@ class TestCmuxBrowserNavigate:
         assert navigate_feed.state.cycles_total == 0
         assert navigate_feed.state.errors_total == 0
         await _invoke(
-            mcp, "cmux_browser_navigate",
-            surface_id="surface:abc", url="https://example.com",
+            mcp,
+            "cmux_browser_navigate",
+            surface_id="surface:abc",
+            url="https://example.com",
         )
         # record_cycle + record_success must have fired exactly once.
         assert navigate_feed.state.cycles_total == 1
@@ -108,10 +117,12 @@ class TestCmuxBrowserTabs:
     async def test_returns_typed_output(
         self, feeds: dict[str, object], mock_cli: CmuxMockTransport
     ) -> None:
-        tabs_json = json.dumps([
-            {"id": "t1", "url": "https://a.example", "title": "A", "active": False},
-            {"id": "t2", "url": "https://b.example", "title": "B", "active": True},
-        ]).encode()
+        tabs_json = json.dumps(
+            [
+                {"id": "t1", "url": "https://a.example", "title": "A", "active": False},
+                {"id": "t2", "url": "https://b.example", "title": "B", "active": True},
+            ]
+        ).encode()
         mcp = FastMCP(name="test")
         mock_cli.call = _ok_cli(stdout=tabs_json)
         register_browser_tools(mcp, mock_cli, feeds)
@@ -131,8 +142,10 @@ class TestCmuxBrowserEvaluate:
         mock_cli.call = _ok_cli(stdout=json.dumps({"ok": True, "result": 42}).encode())
         register_browser_tools(mcp, mock_cli, feeds)
         result = await _invoke(
-            mcp, "cmux_browser_evaluate",
-            surface_id="surface:abc", expression="document.title.length",
+            mcp,
+            "cmux_browser_evaluate",
+            surface_id="surface:abc",
+            expression="document.title.length",
         )
         assert isinstance(result, BrowserEvaluateResult)
         assert result.ok is True
@@ -146,14 +159,20 @@ class TestCmuxBrowserEvaluate:
 
         async def fake_call(args, *, timeout=None):
             return CliResult(
-                ok=False, stdout=b"", stderr=b"ReferenceError: x is not defined",
-                returncode=1, duration_ms=10,
+                ok=False,
+                stdout=b"",
+                stderr=b"ReferenceError: x is not defined",
+                returncode=1,
+                duration_ms=10,
             )
 
         mock_cli.call = AsyncMock(side_effect=fake_call)
         register_browser_tools(mcp, mock_cli, feeds)
         result = await _invoke(
-            mcp, "cmux_browser_evaluate", surface_id="surface:abc", expression="x.y.z",
+            mcp,
+            "cmux_browser_evaluate",
+            surface_id="surface:abc",
+            expression="x.y.z",
         )
         assert isinstance(result, BrowserEvaluateErrorResult)
         assert result.ok is False
@@ -164,10 +183,13 @@ class TestCmuxBrowserEvaluate:
         self, feeds: dict[str, object], mock_cli: CmuxMockTransport
     ) -> None:
         from pydantic import ValidationError
+
         mcp = FastMCP(name="test")
         register_browser_tools(mcp, mock_cli, feeds)
         with pytest.raises(ValidationError):
-            await _invoke(mcp, "cmux_browser_evaluate", surface_id="surface:abc", expression="")
+            await _invoke(
+                mcp, "cmux_browser_evaluate", surface_id="surface:abc", expression=""
+            )
 
 
 @pytest.mark.unit
@@ -180,8 +202,10 @@ class TestCmuxBrowserClick:
         mock_cli.call = _ok_cli()
         register_browser_tools(mcp, mock_cli, feeds)
         result = await _invoke(
-            mcp, "cmux_browser_click",
-            surface_id="surface:abc", selector="button#submit",
+            mcp,
+            "cmux_browser_click",
+            surface_id="surface:abc",
+            selector="button#submit",
         )
         assert isinstance(result, BrowserClickOutput)
         assert result.ok is True
@@ -197,8 +221,11 @@ class TestCmuxBrowserType:
         mock_cli.call = _ok_cli()
         register_browser_tools(mcp, mock_cli, feeds)
         result = await _invoke(
-            mcp, "cmux_browser_type",
-            surface_id="surface:abc", selector="input#q", text="cmux",
+            mcp,
+            "cmux_browser_type",
+            surface_id="surface:abc",
+            selector="input#q",
+            text="cmux",
         )
         # Regression for review finding H3: previously returned BrowserClickOutput
         # (which leaks a `snapshot` field BrowserTypeOutput doesn't declare).
@@ -216,11 +243,15 @@ class TestCmuxBrowserConsole:
 
         async def fake_call(args, *, timeout=None):
             if "errors" in args:
-                return CliResult(ok=True, stdout=b"[]", stderr=b"", returncode=0, duration_ms=5)
+                return CliResult(
+                    ok=True, stdout=b"[]", stderr=b"", returncode=0, duration_ms=5
+                )
             return CliResult(
                 ok=True,
                 stdout=json.dumps([{"level": "info", "text": "hello"}]).encode(),
-                stderr=b"", returncode=0, duration_ms=5,
+                stderr=b"",
+                returncode=0,
+                duration_ms=5,
             )
 
         mock_cli.call = AsyncMock(side_effect=fake_call)

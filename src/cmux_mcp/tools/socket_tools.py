@@ -13,6 +13,7 @@ wiring → Tool feed placement":
         state.record_success()
         return result
 """
+
 from __future__ import annotations
 
 import json
@@ -37,11 +38,12 @@ from cmux_mcp.models import (
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
     from cmux_mcp.client import CmuxSocketTransportProtocol
     from cmux_mcp.health import ToolFeedComponent
 
 
-def _record(state: "ToolFeedComponent") -> None:
+def _record(state: ToolFeedComponent) -> None:
     state.record_cycle()
 
 
@@ -57,10 +59,16 @@ def _as_tool_error(exc: Exception) -> ToolError:
     into the ToolError message text — clients parse it back.
     """
     from cmux_mcp.errors import CmuxError
+
     if isinstance(exc, CmuxError):
         envelope = exc.to_tool_error()
     else:
-        envelope = {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+        envelope = {
+            "code": "internal_error",
+            "message": str(exc),
+            "retryable": False,
+            "data": None,
+        }
     return ToolError(json.dumps(envelope))
 
 
@@ -72,9 +80,9 @@ _notify_last_call_at: float | None = None
 
 
 def register_socket_tools(
-    mcp: "FastMCP",
-    socket: "CmuxSocketTransportProtocol",
-    tool_feeds: dict[str, "ToolFeedComponent"],
+    mcp: FastMCP,
+    socket: CmuxSocketTransportProtocol,
+    tool_feeds: dict[str, ToolFeedComponent],
 ) -> None:
     """Register the 5 socket-direct tools on the FastMCP instance."""
 
@@ -100,28 +108,40 @@ def register_socket_tools(
                 # (wrong field — passed tests only because the fixture had an empty list).
                 # Compose: workspace-level surfaces from surface.list, per-pane
                 # surfaces from pane.surfaces (which returns {"panes": [{id, surfaces}, ...]}).
-                surf_data = await socket.request("surface.list", {"workspace_id": ws_id})
-                pane_data = await socket.request("pane.surfaces", {"workspace_id": ws_id})
+                surf_data = await socket.request(
+                    "surface.list", {"workspace_id": ws_id}
+                )
+                pane_data = await socket.request(
+                    "pane.surfaces", {"workspace_id": ws_id}
+                )
                 panes: list[Pane] = []
                 for pane in pane_data.get("panes", []):
-                    panes.append(Pane(
-                        id=pane["id"],
-                        surfaces=[Surface(**s) for s in pane.get("surfaces", [])],
-                    ))
+                    panes.append(
+                        Pane(
+                            id=pane["id"],
+                            surfaces=[Surface(**s) for s in pane.get("surfaces", [])],
+                        )
+                    )
                 # Workspace-level surfaces attach to the first pane, or fall back to
                 # a synthetic root pane if the workspace has no panes yet.
-                workspace_surfaces = [Surface(**s) for s in surf_data.get("surfaces", [])]
+                workspace_surfaces = [
+                    Surface(**s) for s in surf_data.get("surfaces", [])
+                ]
                 if workspace_surfaces:
                     if panes:
                         panes[0].surfaces.extend(workspace_surfaces)
                     else:
-                        panes.append(Pane(id=f"{ws_id}:root", surfaces=workspace_surfaces))
-                workspaces.append(Workspace(
-                    id=ws_id,
-                    title=ws.get("title", ""),
-                    focused=ws.get("focused", False),
-                    panes=panes,
-                ))
+                        panes.append(
+                            Pane(id=f"{ws_id}:root", surfaces=workspace_surfaces)
+                        )
+                workspaces.append(
+                    Workspace(
+                        id=ws_id,
+                        title=ws.get("title", ""),
+                        focused=ws.get("focused", False),
+                        panes=panes,
+                    )
+                )
             result = ListWorkspacesOutput(workspaces=workspaces)
         except Exception as exc:
             state.record_error()
@@ -235,16 +255,21 @@ def register_socket_tools(
         # Rate is read from the transport's config (passed via CmuxMCPServer).
         rate_per_sec = 1.0
         sock_cfg = getattr(socket, "_config", None)
-        if sock_cfg is not None and getattr(sock_cfg, "notify_rate_limit_per_second", None):
+        if sock_cfg is not None and getattr(
+            sock_cfg, "notify_rate_limit_per_second", None
+        ):
             rate_per_sec = float(sock_cfg.notify_rate_limit_per_second)
         now = time.monotonic()
-        if _notify_last_call_at is not None and (now - _notify_last_call_at) < (1.0 / rate_per_sec):
+        if _notify_last_call_at is not None and (now - _notify_last_call_at) < (
+            1.0 / rate_per_sec
+        ):
             from cmux_mcp.errors import RateLimitedError
+
             wait = (1.0 / rate_per_sec) - (now - _notify_last_call_at)
-            raise RateLimitedError(
-                f"cmux_notify rate-limited; retry in {wait:.2f}s"
-            )
-        validated = NotifyInput(title=title, subtitle=subtitle, body=body, surface_id=surface_id)
+            raise RateLimitedError(f"cmux_notify rate-limited; retry in {wait:.2f}s")
+        validated = NotifyInput(
+            title=title, subtitle=subtitle, body=body, surface_id=surface_id
+        )
         state = tool_feeds["tool.cmux_notify"]
         state.record_cycle()
         try:

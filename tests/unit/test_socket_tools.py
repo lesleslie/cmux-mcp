@@ -1,11 +1,11 @@
 """Tests for the 5 socket-direct tools."""
+
 from __future__ import annotations
 
 import pytest
 from fastmcp import FastMCP
 
 from cmux_mcp.client import CmuxMockTransport
-from cmux_mcp.errors import CmuxProtocolError
 from cmux_mcp.health import build_tool_feed_components
 from cmux_mcp.models import (
     IdentifyOutput,
@@ -37,29 +37,52 @@ class TestCmuxListWorkspaces:
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
         socket.add_response(
-            "workspace.list", {},
-            {"result": {"workspaces": [{"id": "workspace:1", "title": "W1", "focused": True}]}},
+            "workspace.list",
+            {},
+            {
+                "result": {
+                    "workspaces": [
+                        {"id": "workspace:1", "title": "W1", "focused": True}
+                    ]
+                }
+            },
         )
         socket.add_response(
-            "surface.list", {"workspace_id": "workspace:1"},
-            {"result": {"surfaces": [{
-                "id": "surface:ws-root",
-                "kind": "terminal",
-                "cwd": "/home/user",
-                "focused": False,
-            }]}},
+            "surface.list",
+            {"workspace_id": "workspace:1"},
+            {
+                "result": {
+                    "surfaces": [
+                        {
+                            "id": "surface:ws-root",
+                            "kind": "terminal",
+                            "cwd": "/home/user",
+                            "focused": False,
+                        }
+                    ]
+                }
+            },
         )
         socket.add_response(
-            "pane.surfaces", {"workspace_id": "workspace:1"},
-            {"result": {"panes": [{
-                "id": "pane:1",
-                "surfaces": [{
-                    "id": "surface:pane",
-                    "kind": "browser",
-                    "cwd": None,
-                    "focused": True,
-                }],
-            }]}},
+            "pane.surfaces",
+            {"workspace_id": "workspace:1"},
+            {
+                "result": {
+                    "panes": [
+                        {
+                            "id": "pane:1",
+                            "surfaces": [
+                                {
+                                    "id": "surface:pane",
+                                    "kind": "browser",
+                                    "cwd": None,
+                                    "focused": True,
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
         )
         register_socket_tools(mcp, socket, feeds)
         result = await _invoke(mcp, "cmux_list_workspaces")
@@ -77,7 +100,9 @@ class TestCmuxListWorkspaces:
         assert surface_ids == {"surface:pane", "surface:ws-root"}
 
     @pytest.mark.asyncio
-    async def test_socket_error_raises_tool_error(self, feeds: dict[str, object]) -> None:
+    async def test_socket_error_raises_tool_error(
+        self, feeds: dict[str, object]
+    ) -> None:
         """Regression for review finding C6: tool errors must propagate as exceptions
         so FastMCP's protocol layer sets isError: true on the CallToolResult.
 
@@ -86,8 +111,10 @@ class TestCmuxListWorkspaces:
         canonical 2025-06-18 contract.
         """
         import json
+
         import pytest
         from fastmcp.exceptions import ToolError
+
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
         socket.add_response("workspace.list", {}, {"error": {"message": "socket gone"}})
@@ -105,27 +132,34 @@ class TestCmuxSendKeys:
     @pytest.mark.asyncio
     async def test_exactly_one_validation(self, feeds: dict[str, object]) -> None:
         from pydantic import ValidationError
+
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
         socket.add_response(
-            "surface.send_text", {"surface_id": "surface:abc", "text": "x"},
+            "surface.send_text",
+            {"surface_id": "surface:abc", "text": "x"},
             {"result": {"ok": True}},
         )
         register_socket_tools(mcp, socket, feeds)
         # both text and key → Pydantic validation rejects at fn boundary.
         with pytest.raises(ValidationError):
-            await _invoke(mcp, "cmux_send_keys", surface_id="surface:abc", text="x", key="enter")
+            await _invoke(
+                mcp, "cmux_send_keys", surface_id="surface:abc", text="x", key="enter"
+            )
 
     @pytest.mark.asyncio
     async def test_typed_output(self, feeds: dict[str, object]) -> None:
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
         socket.add_response(
-            "surface.send_text", {"surface_id": "surface:abc", "text": "hello"},
+            "surface.send_text",
+            {"surface_id": "surface:abc", "text": "hello"},
             {"result": {"ok": True}},
         )
         register_socket_tools(mcp, socket, feeds)
-        result = await _invoke(mcp, "cmux_send_keys", surface_id="surface:abc", text="hello")
+        result = await _invoke(
+            mcp, "cmux_send_keys", surface_id="surface:abc", text="hello"
+        )
         assert isinstance(result, SendKeysOutput)
         assert result.surface_id == "surface:abc"
         assert result.ok is True
@@ -138,8 +172,14 @@ class TestCmuxNotify:
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
         socket.add_response(
-            "notification.create", {"title": "T"},
-            {"result": {"notification_id": "notification:xyz", "created_at": "2026-09-16T12:00:00Z"}},
+            "notification.create",
+            {"title": "T"},
+            {
+                "result": {
+                    "notification_id": "notification:xyz",
+                    "created_at": "2026-09-16T12:00:00Z",
+                }
+            },
         )
         register_socket_tools(mcp, socket, feeds)
         result = await _invoke(mcp, "cmux_notify", title="T")
@@ -154,14 +194,17 @@ class TestCmuxIdentify:
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
         socket.add_response(
-            "system.identify", {},
-            {"result": {
-                "window": "main",
-                "workspace_id": "workspace:1",
-                "pane_id": "pane:1",
-                "surface_id": "surface:abc",
-                "kind": "terminal",
-            }},
+            "system.identify",
+            {},
+            {
+                "result": {
+                    "window": "main",
+                    "workspace_id": "workspace:1",
+                    "pane_id": "pane:1",
+                    "surface_id": "surface:abc",
+                    "kind": "terminal",
+                }
+            },
         )
         register_socket_tools(mcp, socket, feeds)
         result = await _invoke(mcp, "cmux_identify")
@@ -176,8 +219,19 @@ class TestCmuxListNotifications:
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
         socket.add_response(
-            "notification.list", {},
-            {"result": {"notifications": [{"id": "notification:abc", "title": "Hi", "created_at": "2026-09-16T12:00:00Z"}]}},
+            "notification.list",
+            {},
+            {
+                "result": {
+                    "notifications": [
+                        {
+                            "id": "notification:abc",
+                            "title": "Hi",
+                            "created_at": "2026-09-16T12:00:00Z",
+                        }
+                    ]
+                }
+            },
         )
         register_socket_tools(mcp, socket, feeds)
         result = await _invoke(mcp, "cmux_list_notifications")

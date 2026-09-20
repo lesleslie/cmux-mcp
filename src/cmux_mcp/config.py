@@ -7,6 +7,7 @@ is broken, but because it makes `env_prefix` precedence explicit and unit-testab
 DEFAULT_PORT is imported from cmux_mcp.__init__ (single source of truth per
 spec decision log row 8). Do NOT redefine here.
 """
+
 from __future__ import annotations
 
 import os
@@ -14,7 +15,7 @@ import sys
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from cmux_mcp import DEFAULT_PORT
@@ -70,7 +71,7 @@ class CmuxMCPConfig(BaseSettings):
     health_warmup_seconds: float = 60.0
 
     @model_validator(mode="after")
-    def _mock_mode_auto_on_non_darwin(self) -> "CmuxMCPConfig":
+    def _mock_mode_auto_on_non_darwin(self) -> CmuxMCPConfig:
         # None means "no explicit setting" — pick based on platform.
         # An explicit True or False from env wins (per spec decision log row 7).
         if self.mock_mode is None:
@@ -78,7 +79,7 @@ class CmuxMCPConfig(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def _reject_non_loopback_without_auth(self) -> "CmuxMCPConfig":
+    def _reject_non_loopback_without_auth(self) -> CmuxMCPConfig:
         if self.host not in ("127.0.0.1", "::1", "localhost") and not self.auth_enabled:
             raise ValueError(
                 f"host={self.host!r} requires auth_enabled=True (loopback-only by default)"

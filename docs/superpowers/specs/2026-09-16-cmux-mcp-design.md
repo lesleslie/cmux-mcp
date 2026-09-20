@@ -77,8 +77,10 @@ Several standalone cmux MCP servers exist in the wild (`jasonraz/cmux-browser-mc
 ```python
 class CmuxSocketTransport(Protocol):
     """Long-lived unix-socket JSON-RPC client. Multiplexed by id. Retry-safe."""
-    async def request(self, method: str, params: dict | None = None,
-                      *, timeout: float | None = None) -> dict: ...
+
+    async def request(
+        self, method: str, params: dict | None = None, *, timeout: float | None = None
+    ) -> dict: ...
     async def aclose(self) -> None: ...
     @property
     def state(self) -> Literal["connected", "reconnecting", "disconnected"]: ...
@@ -95,8 +97,10 @@ class CliResult:
 
 class CmuxCliTransport(Protocol):
     """Single-shot subprocess. NOT retry-safe — cmux state already mutated."""
-    async def call(self, args: Sequence[str], *,
-                   timeout: float | None = None) -> CliResult: ...
+
+    async def call(
+        self, args: Sequence[str], *, timeout: float | None = None
+    ) -> CliResult: ...
     async def aclose(self) -> None: ...
     @property
     def active_subprocesses(self) -> int: ...
@@ -104,6 +108,7 @@ class CmuxCliTransport(Protocol):
 
 class CmuxMockTransport:
     """In-process canned responses. Implements both protocols."""
+
     ...
 ```
 
@@ -163,6 +168,7 @@ class Notification(BaseModel):
 ```python
 class BrowserSnapshot(BaseModel):
     """Plain text a11y tree with `[ref=eN]` markers (Playwright-style)."""
+
     snapshot: str
     captured_at: datetime | None = None
 
@@ -198,12 +204,15 @@ class BrowserConsoleResult(BaseModel):
     messages: list[ConsoleMessage]
     errors: list[BrowserError]
     truncated: bool = False
-    partial_failure: bool = False  # True if one of console list / errors list sub-call failed
+    partial_failure: bool = (
+        False  # True if one of console list / errors list sub-call failed
+    )
     failed_subcalls: list[Literal["console_list", "errors_list"]] = []
 
 
 # Tool output models — every tool has a typed output so FastMCP's output_schema
 # and MCP 2025-06-18's structuredContent are honored on the success path.
+
 
 class ListWorkspacesOutput(BaseModel):
     workspaces: list[Workspace]
@@ -240,9 +249,12 @@ class BrowserNavigateOutput(BaseModel):
 
 class BrowserEvaluateErrorResult(BaseModel):
     """Discriminated error shape for non-serializable returns (BrowserError exception OR runtime error string)."""
+
     ok: Literal[False] = False
     result: None = None
-    error: Annotated[str, Field(min_length=1)]  # Either "{message, stack}" JSON string OR plain runtime error string
+    error: Annotated[
+        str, Field(min_length=1)
+    ]  # Either "{message, stack}" JSON string OR plain runtime error string
     error_kind: Literal["runtime_exception", "not_serializable", "timeout"]
 
 
@@ -257,6 +269,7 @@ class BrowserTypeOutput(BaseModel):
 
 class BrowserTabsOutput(BaseModel):
     """Tabs ordered by tab index ascending (left-to-right in tab bar)."""
+
     tabs: list[BrowserTab]
 ```
 
@@ -266,13 +279,38 @@ class BrowserTabsOutput(BaseModel):
 class SendKeysInput(BaseModel):
     surface_id: Annotated[str, Field(pattern=SURFACE_ID_PATTERN)]
     text: str | None = None
-    key: Literal[
-        "enter", "tab", "escape", "backspace", "delete",
-        "up", "down", "left", "right", "home", "end",
-        "pageup", "pagedown", "f1", "f2", "f3", "f4",
-        "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
-        "space", "return",
-    ] | None = None
+    key: (
+        Literal[
+            "enter",
+            "tab",
+            "escape",
+            "backspace",
+            "delete",
+            "up",
+            "down",
+            "left",
+            "right",
+            "home",
+            "end",
+            "pageup",
+            "pagedown",
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5",
+            "f6",
+            "f7",
+            "f8",
+            "f9",
+            "f10",
+            "f11",
+            "f12",
+            "space",
+            "return",
+        ]
+        | None
+    ) = None
 
     @model_validator(mode="after")
     def _exactly_one_of_text_or_key(self) -> "SendKeysInput":
@@ -383,7 +421,9 @@ Every tool returns one of:
 ```python
 CallToolResult(
     content=[TextContent(text=json.dumps(output_model.model_dump(mode="json")))],
-    structured_content=output_model.model_dump(mode="json"),  # honors MCP 2025-06-18 outputSchema
+    structured_content=output_model.model_dump(
+        mode="json"
+    ),  # honors MCP 2025-06-18 outputSchema
     is_error=False,
 )
 ```
@@ -544,10 +584,10 @@ Reads console messages and JS errors from the browser surface. **Aggregates two 
 **Connection lifecycle:**
 
 1. `connect()` opens unix socket; reads `system.ping` once; transitions to `connected`.
-2. On EOF: transition to `reconnecting`; spawn backoff loop.
-3. Backoff: `min(reconnect_max_delay_seconds, reconnect_initial_delay_seconds * 2 ** attempt) * random.uniform(0, 1)` with `reconnect_max_attempts` ceiling (default 5). After max: transition to `disconnected`; subsequent `request()` calls fail-fast with `cmux_socket_max_retries_exceeded`.
-4. While `disconnected`, `/health` reports socket feed as `state: "disconnected"`. Server stays up; agents can recover manually or wait for cmux to come back.
-5. `aclose()` cancels pending futures with `CmuxTransportError`, drains, closes.
+1. On EOF: transition to `reconnecting`; spawn backoff loop.
+1. Backoff: `min(reconnect_max_delay_seconds, reconnect_initial_delay_seconds * 2 ** attempt) * random.uniform(0, 1)` with `reconnect_max_attempts` ceiling (default 5). After max: transition to `disconnected`; subsequent `request()` calls fail-fast with `cmux_socket_max_retries_exceeded`.
+1. While `disconnected`, `/health` reports socket feed as `state: "disconnected"`. Server stays up; agents can recover manually or wait for cmux to come back.
+1. `aclose()` cancels pending futures with `CmuxTransportError`, drains, closes.
 
 **Concurrent requests:**
 
@@ -577,7 +617,9 @@ async def call(self, args: Sequence[str], *, timeout: float | None = None) -> Cl
         env=self._filtered_env(),  # see Security §subprocess-env
     )
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout or self._default_timeout)
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(), timeout=timeout or self._default_timeout
+        )
     except asyncio.TimeoutError:
         proc.send_signal(SIGTERM)
         try:
@@ -618,23 +660,30 @@ async def call(self, args: Sequence[str], *, timeout: float | None = None) -> Cl
 class CmuxError(Exception):
     """Base. Carries context dict for /health envelope and structured tool errors."""
 
+
 class CmuxTransportError(CmuxError):
     """Socket EOF, reconnect failure, malformed JSON."""
+
 
 class CmuxTimeoutError(CmuxError):
     """Per-call socket or CLI timeout fired."""
 
+
 class CmuxOnlyAccessDeniedError(CmuxError):
     """Socket access denied by cmuxOnly mode. Recovery: relaunch from inside cmux terminal."""
+
 
 class UnsupportedPlatformError(CmuxError):
     """Non-darwin without CMUX_MCP_MOCK=1."""
 
+
 class CmuxBinaryNotFoundError(CmuxError):
     """cmux CLI binary missing or not executable."""
 
+
 class CmuxProtocolError(CmuxError):
     """cmux returned error.code or malformed JSON-RPC response."""
+
 
 class CmuxValidationError(CmuxError):
     """Input validation failed (regex, URL, type, length)."""
@@ -653,6 +702,7 @@ class CmuxValidationError(CmuxError):
 ```python
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class CmuxMCPConfig(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="CMUX_MCP_",
@@ -667,10 +717,16 @@ class CmuxMCPConfig(BaseSettings):
     # (Pydantic v2 idiom; replaces class-body-time `os.environ.get` evaluation
     # which captured the env at import time and made tests env-departmental patch
     # paths ineffective).
-    socket_path: Path = Field(default_factory=lambda: Path(os.environ.get("CMUX_SOCKET_PATH", "/tmp/cmux.sock")))
+    socket_path: Path = Field(
+        default_factory=lambda: Path(
+            os.environ.get("CMUX_SOCKET_PATH", "/tmp/cmux.sock")
+        )
+    )
     cmux_cli_path: Path | None = None  # None → auto-discovery (see below)
     socket_short_timeout_seconds: float = 5.0  # health probes, pings, capabilities
-    socket_long_timeout_seconds: float = 15.0  # workspace.list + surface.list + pane.surfaces composed call
+    socket_long_timeout_seconds: float = (
+        15.0  # workspace.list + surface.list + pane.surfaces composed call
+    )
     cli_timeout_seconds: float = 30.0  # per-subprocess CLI call
     cli_max_concurrent: int = 8
     reconnect_initial_delay_seconds: float = 0.5
@@ -687,8 +743,16 @@ class CmuxMCPConfig(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     shutdown_grace_seconds: float = 10.0
     auth_enabled: bool = False  # opt-in for non-loopback deployments
-    pid_file_path: Path = Field(default_factory=lambda: Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "cmux-mcp" / "cmux-mcp.pid")
-    health_warmup_seconds: float = 60.0  # grace period before "tool never called" triggers 503
+    pid_file_path: Path = Field(
+        default_factory=lambda: (
+            Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp"))
+            / "cmux-mcp"
+            / "cmux-mcp.pid"
+        )
+    )
+    health_warmup_seconds: float = (
+        60.0  # grace period before "tool never called" triggers 503
+    )
 
     @model_validator(mode="after")
     def _mock_mode_auto_on_non_darwin(self) -> "CmuxMCPConfig":
@@ -714,12 +778,12 @@ class CmuxMCPConfig(BaseSettings):
 When `cmux_cli_path` is not set, server probes in order:
 
 1. `CMUX_MCP_CLI_PATH` env var (operator override; checked first inside `__init__`)
-2. `which cmux` from `$PATH`
-3. `/Applications/cmux.app/Contents/Resources/bin/cmux` (Homebrew Cask target)
-4. `/opt/homebrew/Caskroom/cmux/*/cmux.app/Contents/Resources/bin/cmux` (latest version, sorted)
-5. `/usr/local/Caskroom/cmux/*/cmux.app/Contents/Resources/bin/cmux` (Intel macs)
-6. `~/Library/Developer/Xcode/DerivedData/cmux-*/Build/Products/{Debug,Release}/cmux.app/Contents/Resources/bin/cmux` (dev builds)
-7. Fail with `cmux_cli_not_found` listing probed paths
+1. `which cmux` from `$PATH`
+1. `/Applications/cmux.app/Contents/Resources/bin/cmux` (Homebrew Cask target)
+1. `/opt/homebrew/Caskroom/cmux/*/cmux.app/Contents/Resources/bin/cmux` (latest version, sorted)
+1. `/usr/local/Caskroom/cmux/*/cmux.app/Contents/Resources/bin/cmux` (Intel macs)
+1. `~/Library/Developer/Xcode/DerivedData/cmux-*/Build/Products/{Debug,Release}/cmux.app/Contents/Resources/bin/cmux` (dev builds)
+1. Fail with `cmux_cli_not_found` listing probed paths
 
 `doctor` subcommand runs the same probe and reports the result.
 
@@ -735,10 +799,10 @@ When `cmux_cli_path` is not set, server probes in order:
 ### Startup preflight (`start`)
 
 1. Resolve `cmux_cli_path` via discovery (above). Fail fast with `cmux_cli_not_found` if not found.
-2. Open socket; read `system.ping`. Fail fast with `cmux_socket_unreachable` if not reachable.
-3. Read `system.capabilities`. (Used for preflight sanity; tool surface is static — see "Out of v1" for dynamic capability-gated tools.)
-4. Check `pid_file_path`: if it exists and the PID is alive (`kill -0 <pid>` with same start time), refuse with `already_running`. If it exists and PID is dead, remove and proceed. Write new PID file.
-5. Bind HTTP, start `BaseOneiricServerMixin.startup()`, log `started`.
+1. Open socket; read `system.ping`. Fail fast with `cmux_socket_unreachable` if not reachable.
+1. Read `system.capabilities`. (Used for preflight sanity; tool surface is static — see "Out of v1" for dynamic capability-gated tools.)
+1. Check `pid_file_path`: if it exists and the PID is alive (`kill -0 <pid>` with same start time), refuse with `already_running`. If it exists and PID is dead, remove and proceed. Write new PID file.
+1. Bind HTTP, start `BaseOneiricServerMixin.startup()`, log `started`.
 
 ### Per-session termination
 
@@ -748,12 +812,12 @@ When `cmux_cli_path` is not set, server probes in order:
 ### Graceful shutdown (`stop`)
 
 1. SIGTERM handler: stop accepting new tool calls.
-2. Wait up to `shutdown_grace_seconds` (default 10s) for in-flight tasks.
-3. Cancel remaining tasks (subprocesses killed via `CmuxCliTransport.aclose()`).
-4. `CmuxSocketTransport.aclose()` (drain pending futures with `CmuxTransportError`).
-5. HTTP server stops accepting.
-6. Oneiric logger flushes handlers.
-7. PID file unlinked via `atexit`.
+1. Wait up to `shutdown_grace_seconds` (default 10s) for in-flight tasks.
+1. Cancel remaining tasks (subprocesses killed via `CmuxCliTransport.aclose()`).
+1. `CmuxSocketTransport.aclose()` (drain pending futures with `CmuxTransportError`).
+1. HTTP server stops accepting.
+1. Oneiric logger flushes handlers.
+1. PID file unlinked via `atexit`.
 
 ### Stale PID file recovery
 
@@ -799,6 +863,7 @@ Per the discipline, each feed carries the four signals: `entities_count`, `last_
 **Mock-mode health:** mock transport emits to a separate `mock_transport` component. `/health` reports `mock_mode: true` so dashboards can alert on `mock_transport.cycles_total > 0` in production.
 
 **HTTP status code:**
+
 - 200 OK if all feeds `ok`
 - 503 Service Unavailable if any feed `degraded` (socket disconnected, CLI binary missing) OR a tool feed has `cycles_total == 0 && errors_total == 0` AND startup was >60s ago
 
@@ -1019,6 +1084,7 @@ from mcp_common.cli import MCPServerCLIFactory
 from cmux_mcp.config import CmuxMCPConfig
 from cmux_mcp.server import CmuxMCPServer
 
+
 def main() -> None:
     # Amendment 2026-09-19 (#E): keyword is `_description` not `description`
     # (verified via `inspect.signature(MCPServerCLIFactory.create_server_cli)`).
@@ -1069,10 +1135,12 @@ class CmuxMCPServer(BaseOneiricServerMixin):
                 *build_tool_feed_components(),
             ],
         )
-        self._create_startup_snapshot(custom_components={
-            "cmux_socket": self.socket_transport.state,
-            "cmux_cli": self.cli_transport.cmux_cli_path,
-        })
+        self._create_startup_snapshot(
+            custom_components={
+                "cmux_socket": self.socket_transport.state,
+                "cmux_cli": self.cli_transport.cmux_cli_path,
+            }
+        )
 
     async def shutdown(self) -> None:
         if self.cli_transport:
@@ -1108,7 +1176,9 @@ def register_tools(
     @mcp.tool(
         name="cmux_list_workspaces",
         description="List all workspaces with their panes and surfaces.",
-        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+        annotations=ToolAnnotations(
+            readOnlyHint=True, idempotentHint=True, openWorldHint=True
+        ),
     )
     async def cmux_list_workspaces() -> ListWorkspacesOutput:
         state = tool_feeds["cmux_list_workspaces"]
@@ -1215,30 +1285,30 @@ None at design freeze. Items deferred to v1.1+ are listed in **Scope → Out of 
 ## Decision log
 
 1. **License (BSD 3-Clause)** — matches WWW catalog precedent (excalidraw-mcp, css-mcp, mailgun-mcp, etc.). cmux is GPL-3.0; cmux-mcp does not link or vendor cmux code. "Mere aggregation" rationale per `gpl-subprocess-aggregation.md` memory.
-2. **Default port 3061** — next free slot in WWW catalog after css-mcp (3050), excalidraw (3032), langsmith (3048), archive-org (3054), scapy (3056). Port collision-checked against existing fleet.
-3. **Hybrid transport (socket + CLI)** — socket-direct for documented `workspace.*`/`surface.*`/`pane.*`/`notification.*`/`system.*` (low latency, multiplexed); CLI subprocess for browser (only documented path; cmux's WebKit browser does not expose a remote inspector).
-4. **`CmuxSocketTransport` + `CmuxCliTransport` as two Protocols** — not unified `CmuxTransport`. Failure modes, retry semantics, observability differ; one abstraction would lose critical distinctions.
-5. **`BaseSettings` direct subclass for config** — per chat-bridge-mcp decision log row 24-28. `OneiricMCPConfig(BaseModel)` silently ignores `SettingsConfigDict` overrides; `BaseSettings` with explicit `SettingsConfigDict(env_prefix=…, env_file=…, extra=…)` is the verified-working pattern.
-6. **`cmux_` prefix on all 12 tools** — prevents collision with sibling servers' `notify`, `identify`, `send_keys`. Catalog convention from chat-bridge-mcp's naming pattern.
-7. **Mock-mode auto-flip on non-darwin WITH unmissable WARN banner** — resolves the contradiction (line 25 vs line 27 vs line 297 of original spec). Non-macOS is a development convenience, not a production deployment.
-8. **DEFAULT_PORT as module constant in `__init__.py`** — single source of truth for port discovery (per chat-bridge-mcp decision log row 25). Required by Bodai MCP wiring discipline.
-9. **`register_http_health_route` with per-tool + per-transport `HealthFeedState`** — per Bodai MCP backend wiring discipline. Without this, `/health` lies about feed state (per `mcp-surface-health-illusion` memory).
-10. **Named tests as cross-reference anchors** — listed in § "Named tests" above. Each is a test that pins a specific spec claim. Cross-references from the spec body land on these names.
-11. **Lifecycle detection on SIGHUP (foreground only)** — `start --bg` explicitly drops the per-session guarantee. Documented in § "Per-session termination".
-12. **Resource limits: `max_response_bytes`, `cli_max_concurrent`, `notify_rate_limit_per_second`** — all defaults pinned in config. Fork-bomb protection and PII logging exclusion work together.
-13. **`CmuxMockTransport` implements BOTH protocols** — tool code is identical against real and fake transports.
-14. **`from __future__ import annotations` in every source file** — per Bodai CLAUDE.md convention.
-15. **Tool annotations on every tool** — per MCP 2025-03-26 spec. Without annotations, MCP clients can't render safety hints or pre-filter mutations.
-16. **`outputSchema` + `structuredContent` on every tool** — per MCP 2025-06-18 spec. Avoids stringly-typed double-parse.
-17. **Streamable HTTP pinned to MCP 2025-06-18** — supports annotations, `outputSchema`, `structuredContent`. Resumability deferred.
-18. **Per-instance `FastMCP` instead of module-level singleton** (round-3 fix, M-4) — cmux-mcp creates `self.mcp = FastMCP(...)` in `__init__` because per-session config and async-constructed transports need lifecycle control. This forces programmatic tool registration in `_tools.py.register_tools()` instead of `@mcp.tool()` decorators at module load. Trade-off: explicit lifecycle control over decorator ergonomics. Cross-llm-mcp uses the singleton pattern (compatible with its tool signature shape).
-19. **`/health` `extra_components` carries the full per-tool feed list** (round-3 fix) — chat-bridge-mcp passes `extra_components=[]` and exposes peer health via a separate `get_peer_health` tool. cmux-mcp puts per-tool feed state directly in `/health` because the 12-tool surface is denser than chat-bridge-mcp's 6-tool surface; a separate `get_tool_health()` tool would be overhead. Both are Bodai-discipline-compliant.
-20. **Truncation is a soft marker, not an error** (round-3 fix, N5) — `truncated: bool` on the output model signals clipping; `is_error` stays `False`. The previously-listed `response_truncated` error code is removed. Clients re-query with smaller scope on truncation.
-21. **`dangerousHint` is not used** (round-3 fix, N3) — MCP 2025-03-26 / 2025-06-18 only define 4 standard annotations; `dangerousHint` would be silently ignored by FastMCP. `destructiveHint: true` on `browser_evaluate` covers the destructive nature. The arbitrary-JS trust model is documented in tool description + README.
-22. **60s warm-up before "tool never called" triggers degraded** (round-3 fix, M-8) — `HealthFeedState.started_at` + `health_warmup_seconds` config. Avoids false-degraded during startup. Mock transport has its own component so dashboards can alert on `mock_transport.cycles_total > 0` in production.
-23. **Browser subprocess timeout split: short (5s) vs long (15s) vs CLI (30s)** (round-3 fix, M-7) — `socket_short_timeout_seconds` for health probes / pings / `system.capabilities`; `socket_long_timeout_seconds` for the composed `cmux_list_workspaces` call (`workspace.list + surface.list + pane.surfaces`); `cli_timeout_seconds` for subprocess CLI invocations.
-24. **Auth-required for non-loopback bind** (round-3 fix, M-9) — `host` not in loopback set AND `auth_enabled=False` raises a config validation error at startup. Prevents accidental `host=0.0.0.0` exposure.
-25. **Decision log row 5 wording tightened** (round-3 fix, M-3) — the original wording claimed `OneiricMCPConfig(BaseModel)` silently ignores `SettingsConfigDict` overrides. Verified: cmux-mcp uses `pydantic_settings.BaseSettings` direct subclass with explicit `SettingsConfigDict(env_prefix="CMUX_MCP_", env_file=".env", extra="allow")` for orthogonality — not strictly because OneiricMCPConfig is broken, but because direct `BaseSettings` makes the `env_prefix` precedence explicit and unit-testable without depending on OneiricMCPConfig internals.
+1. **Default port 3061** — next free slot in WWW catalog after css-mcp (3050), excalidraw (3032), langsmith (3048), archive-org (3054), scapy (3056). Port collision-checked against existing fleet.
+1. **Hybrid transport (socket + CLI)** — socket-direct for documented `workspace.*`/`surface.*`/`pane.*`/`notification.*`/`system.*` (low latency, multiplexed); CLI subprocess for browser (only documented path; cmux's WebKit browser does not expose a remote inspector).
+1. **`CmuxSocketTransport` + `CmuxCliTransport` as two Protocols** — not unified `CmuxTransport`. Failure modes, retry semantics, observability differ; one abstraction would lose critical distinctions.
+1. **`BaseSettings` direct subclass for config** — per chat-bridge-mcp decision log row 24-28. `OneiricMCPConfig(BaseModel)` silently ignores `SettingsConfigDict` overrides; `BaseSettings` with explicit `SettingsConfigDict(env_prefix=…, env_file=…, extra=…)` is the verified-working pattern.
+1. **`cmux_` prefix on all 12 tools** — prevents collision with sibling servers' `notify`, `identify`, `send_keys`. Catalog convention from chat-bridge-mcp's naming pattern.
+1. **Mock-mode auto-flip on non-darwin WITH unmissable WARN banner** — resolves the contradiction (line 25 vs line 27 vs line 297 of original spec). Non-macOS is a development convenience, not a production deployment.
+1. **DEFAULT_PORT as module constant in `__init__.py`** — single source of truth for port discovery (per chat-bridge-mcp decision log row 25). Required by Bodai MCP wiring discipline.
+1. **`register_http_health_route` with per-tool + per-transport `HealthFeedState`** — per Bodai MCP backend wiring discipline. Without this, `/health` lies about feed state (per `mcp-surface-health-illusion` memory).
+1. **Named tests as cross-reference anchors** — listed in § "Named tests" above. Each is a test that pins a specific spec claim. Cross-references from the spec body land on these names.
+1. **Lifecycle detection on SIGHUP (foreground only)** — `start --bg` explicitly drops the per-session guarantee. Documented in § "Per-session termination".
+1. **Resource limits: `max_response_bytes`, `cli_max_concurrent`, `notify_rate_limit_per_second`** — all defaults pinned in config. Fork-bomb protection and PII logging exclusion work together.
+1. **`CmuxMockTransport` implements BOTH protocols** — tool code is identical against real and fake transports.
+1. **`from __future__ import annotations` in every source file** — per Bodai CLAUDE.md convention.
+1. **Tool annotations on every tool** — per MCP 2025-03-26 spec. Without annotations, MCP clients can't render safety hints or pre-filter mutations.
+1. **`outputSchema` + `structuredContent` on every tool** — per MCP 2025-06-18 spec. Avoids stringly-typed double-parse.
+1. **Streamable HTTP pinned to MCP 2025-06-18** — supports annotations, `outputSchema`, `structuredContent`. Resumability deferred.
+1. **Per-instance `FastMCP` instead of module-level singleton** (round-3 fix, M-4) — cmux-mcp creates `self.mcp = FastMCP(...)` in `__init__` because per-session config and async-constructed transports need lifecycle control. This forces programmatic tool registration in `_tools.py.register_tools()` instead of `@mcp.tool()` decorators at module load. Trade-off: explicit lifecycle control over decorator ergonomics. Cross-llm-mcp uses the singleton pattern (compatible with its tool signature shape).
+1. **`/health` `extra_components` carries the full per-tool feed list** (round-3 fix) — chat-bridge-mcp passes `extra_components=[]` and exposes peer health via a separate `get_peer_health` tool. cmux-mcp puts per-tool feed state directly in `/health` because the 12-tool surface is denser than chat-bridge-mcp's 6-tool surface; a separate `get_tool_health()` tool would be overhead. Both are Bodai-discipline-compliant.
+1. **Truncation is a soft marker, not an error** (round-3 fix, N5) — `truncated: bool` on the output model signals clipping; `is_error` stays `False`. The previously-listed `response_truncated` error code is removed. Clients re-query with smaller scope on truncation.
+1. **`dangerousHint` is not used** (round-3 fix, N3) — MCP 2025-03-26 / 2025-06-18 only define 4 standard annotations; `dangerousHint` would be silently ignored by FastMCP. `destructiveHint: true` on `browser_evaluate` covers the destructive nature. The arbitrary-JS trust model is documented in tool description + README.
+1. **60s warm-up before "tool never called" triggers degraded** (round-3 fix, M-8) — `HealthFeedState.started_at` + `health_warmup_seconds` config. Avoids false-degraded during startup. Mock transport has its own component so dashboards can alert on `mock_transport.cycles_total > 0` in production.
+1. **Browser subprocess timeout split: short (5s) vs long (15s) vs CLI (30s)** (round-3 fix, M-7) — `socket_short_timeout_seconds` for health probes / pings / `system.capabilities`; `socket_long_timeout_seconds` for the composed `cmux_list_workspaces` call (`workspace.list + surface.list + pane.surfaces`); `cli_timeout_seconds` for subprocess CLI invocations.
+1. **Auth-required for non-loopback bind** (round-3 fix, M-9) — `host` not in loopback set AND `auth_enabled=False` raises a config validation error at startup. Prevents accidental `host=0.0.0.0` exposure.
+1. **Decision log row 5 wording tightened** (round-3 fix, M-3) — the original wording claimed `OneiricMCPConfig(BaseModel)` silently ignores `SettingsConfigDict` overrides. Verified: cmux-mcp uses `pydantic_settings.BaseSettings` direct subclass with explicit `SettingsConfigDict(env_prefix="CMUX_MCP_", env_file=".env", extra="allow")` for orthogonality — not strictly because OneiricMCPConfig is broken, but because direct `BaseSettings` makes the `env_prefix` precedence explicit and unit-testable without depending on OneiricMCPConfig internals.
 
 ## Amendment Log
 
@@ -1279,10 +1349,10 @@ under 60 seconds; adding both to the spec-review checklist is recommended.
 Run all four before declaring a plan `complete`:
 
 1. `uv lock --dry-run` — catches `requires-python` vs dep-pin mismatches
-2. `inspect.signature` for every external API the plan references — catches
+1. `inspect.signature` for every external API the plan references — catches
    keyword renames and signature drift
-3. `pytest --collect-only` against the plan's own tests — catches import-level
+1. `pytest --collect-only` against the plan's own tests — catches import-level
    drift before any execution
-4. TDD execution pass (Tasks 1-N) — every commit should be red → green
+1. TDD execution pass (Tasks 1-N) — every commit should be red → green
 
 Phase 3 would have been caught at step 2 in under a minute per amendment.

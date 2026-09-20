@@ -1,51 +1,46 @@
 """Tests for src/cmux_mcp/models.py — domain models."""
+
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
 from cmux_mcp.models import (
-    NOTIFICATION_ID_PATTERN,
-    Notification,
-    Pane,
-    Surface,
-    SurfaceKind,
-    SURFACE_ID_PATTERN,
-    Workspace,
+    BrowserClickOutput,
+    BrowserConsoleInput,
     # Browser models
     BrowserConsoleResult,
     BrowserError,
-    BrowserSnapshot,
-    BrowserTab,
-    ConsoleLevel,
-    ConsoleMessage,
-    # Tool inputs
-    BrowserClickInput,
-    BrowserConsoleInput,
+    BrowserEvaluateErrorResult,
     BrowserEvaluateInput,
     BrowserNavigateInput,
-    BrowserSnapshotInput,
-    BrowserTabsInput,
-    BrowserTypeInput,
-    NotifyInput,
-    SendKeysInput,
-    # Tool outputs
-    BrowserClickOutput,
-    BrowserEvaluateErrorResult,
     BrowserNavigateOutput,
+    BrowserSnapshot,
+    BrowserTab,
     BrowserTabsOutput,
+    ConsoleLevel,
+    ConsoleMessage,
     IdentifyOutput,
     ListNotificationsOutput,
     ListWorkspacesOutput,
+    Notification,
     NotifyOutput,
+    Pane,
+    SendKeysInput,
     SendKeysOutput,
+    Surface,
+    SurfaceKind,
+    Workspace,
 )
 
 
 @pytest.mark.unit
 class TestSurfaceIdPatterns:
     def test_surface_id_pattern_accepts_canonical(self) -> None:
-        assert Surface(id="surface:abc123", kind=SurfaceKind.TERMINAL).id == "surface:abc123"
+        assert (
+            Surface(id="surface:abc123", kind=SurfaceKind.TERMINAL).id
+            == "surface:abc123"
+        )
 
     def test_surface_id_pattern_rejects_path_traversal(self) -> None:
         with pytest.raises(ValidationError):
@@ -73,7 +68,9 @@ class TestTreeStructure:
     def test_workspace_contains_panes(self) -> None:
         surface = Surface(id="surface:abc", kind=SurfaceKind.TERMINAL, focused=True)
         pane = Pane(id="pane:1", surfaces=[surface])
-        ws = Workspace(id="workspace:1", title="My Workspace", focused=True, panes=[pane])
+        ws = Workspace(
+            id="workspace:1", title="My Workspace", focused=True, panes=[pane]
+        )
         assert ws.panes[0].surfaces[0].id == "surface:abc"
         assert ws.panes[0].surfaces[0].focused is True
 
@@ -97,7 +94,9 @@ class TestNotification:
         assert n.surface_id == "surface:abc"
 
     def test_notification_created_at_serializes_iso8601(self) -> None:
-        n = Notification(id="notification:xyz", title="Test", created_at="2026-09-16T12:34:56Z")
+        n = Notification(
+            id="notification:xyz", title="Test", created_at="2026-09-16T12:34:56Z"
+        )
         dumped = n.model_dump(mode="json")
         # Both are valid RFC 3339 UTC; Pydantic v2 preserves the input suffix
         # ("Z" stays "Z", "+00:00" stays "+00:00") in mode="json".
@@ -110,7 +109,9 @@ class TestNotification:
 @pytest.mark.unit
 class TestBrowserModels:
     def test_browser_snapshot_round_trip(self) -> None:
-        snap = BrowserSnapshot(snapshot="[ref=e1] button Sign in", captured_at="2026-09-16T12:34:56Z")
+        snap = BrowserSnapshot(
+            snapshot="[ref=e1] button Sign in", captured_at="2026-09-16T12:34:56Z"
+        )
         assert "Sign in" in snap.snapshot
 
     def test_console_level_strenum(self) -> None:
@@ -121,11 +122,15 @@ class TestBrowserModels:
         assert ConsoleLevel.DEBUG == "debug"
 
     def test_console_message_optional_source(self) -> None:
-        msg = ConsoleMessage(level=ConsoleLevel.LOG, text="hello", timestamp="2026-09-16T12:34:56Z")
+        msg = ConsoleMessage(
+            level=ConsoleLevel.LOG, text="hello", timestamp="2026-09-16T12:34:56Z"
+        )
         assert msg.source is None
 
     def test_browser_tab_url_https_only(self) -> None:
-        tab = BrowserTab(id="t1", url="https://example.com", title="Example", active=True)
+        tab = BrowserTab(
+            id="t1", url="https://example.com", title="Example", active=True
+        )
         assert str(tab.url) == "https://example.com/"
 
     def test_browser_tab_url_rejects_javascript(self) -> None:
@@ -138,7 +143,10 @@ class TestBrowserModels:
 
     def test_browser_console_result_partial_failure_flags(self) -> None:
         result = BrowserConsoleResult(
-            messages=[], errors=[], partial_failure=True, failed_subcalls=["errors_list"]
+            messages=[],
+            errors=[],
+            partial_failure=True,
+            failed_subcalls=["errors_list"],
         )
         assert result.partial_failure is True
         assert result.failed_subcalls == ["errors_list"]
@@ -166,7 +174,7 @@ class TestSendKeysInput:
 
     def test_key_literal_enum_validates_known_only(self) -> None:
         with pytest.raises(ValidationError):
-            SendKeysInput(surface_id="surface:abc", key="Eneter")  # typo
+            SendKeysInput(surface_id="surface:abc", key="Enter")  # typo
 
 
 @pytest.mark.unit
@@ -233,7 +241,9 @@ class TestToolOutputModels:
         assert out.ok is True
 
     def test_notify_output_serializes_datetime(self) -> None:
-        out = NotifyOutput(notification_id="notification:xyz", created_at="2026-09-16T12:34:56Z")
+        out = NotifyOutput(
+            notification_id="notification:xyz", created_at="2026-09-16T12:34:56Z"
+        )
         assert "2026" in out.model_dump(mode="json")["created_at"]
 
     def test_browser_navigate_output_truncated_flag(self) -> None:
@@ -270,5 +280,7 @@ class TestToolOutputModels:
         # When ok=False, result must be None (discriminated union)
         with pytest.raises(ValidationError):
             BrowserEvaluateErrorResult(
-                error="x", error_kind="runtime_exception", result="should not be allowed"
+                error="x",
+                error_kind="runtime_exception",
+                result="should not be allowed",
             )  # type: ignore[call-arg]

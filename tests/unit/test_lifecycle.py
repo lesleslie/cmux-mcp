@@ -1,10 +1,10 @@
 """Tests for CmuxMCPServer — lifecycle mixin wiring."""
+
 from __future__ import annotations
 
 import os
-import warnings
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, PropertyMock, patch
 
 import pytest
 
@@ -19,7 +19,9 @@ pytestmark = pytest.mark.filterwarnings("ignore::RuntimeWarning")
 @pytest.mark.unit
 class TestLifecycle:
     @pytest.mark.asyncio
-    async def test_startup_initializes_transports_and_registers_tools(self, tmp_path: Path) -> None:
+    async def test_startup_initializes_transports_and_registers_tools(
+        self, tmp_path: Path
+    ) -> None:
         sock = tmp_path / "cmux.sock"
         sock.touch()
         config = CmuxMCPConfig(socket_path=sock, cmux_cli_path=tmp_path / "cmux")
@@ -77,8 +79,10 @@ class TestHealthRegistration:
         # mcp._additional_http_routes is a list of Starlette routes; the custom
         # /health route from _register_health_route is appended there.
         from starlette.routing import Route
+
         health_routes = [
-            r for r in server.mcp._additional_http_routes
+            r
+            for r in server.mcp._additional_http_routes
             if isinstance(r, Route) and r.path == "/health"
         ]
         assert len(health_routes) == 1, (
@@ -104,19 +108,22 @@ class TestHealthRegistration:
         await server.startup()
         # Mark every tool feed as having been exercised so the warm-up gate
         # doesn't apply (cycles_total > 0).
-        for name, feed in server._tool_feeds.items():
+        for feed in server._tool_feeds.values():
             feed.state.cycles_total = 1
             feed.state.entities_count = 1
 
         # Invoke the custom route's endpoint callable directly.
         from starlette.requests import Request
+
         route = next(
-            r for r in server.mcp._additional_http_routes
+            r
+            for r in server.mcp._additional_http_routes
             if getattr(r, "path", None) == "/health"
         )
         response = await route.endpoint(Request({"type": "http"}))
         assert response.status_code == 200
         import json
+
         body = json.loads(response.body)
         assert body["status"] == "ok"
         assert body["service"] == "cmux-mcp"
@@ -132,7 +139,11 @@ class TestHealthRegistration:
         # server lifetime so the health route sees "disconnected" — the patch
         # is restored at the end of the with-block. Use PropertyMock for
         # descriptor-aware replacement (the property's __get__ passes self).
-        with patch.object(type(bad_socket), "state", new_callable=PropertyMock(return_value="disconnected")):
+        with patch.object(
+            type(bad_socket),
+            "state",
+            new_callable=PropertyMock(return_value="disconnected"),
+        ):
             server.socket_transport = bad_socket
             server.cli_transport = CmuxMockTransport()
             server.runtime.initialize = AsyncMock()  # type: ignore[method-assign]
@@ -140,13 +151,16 @@ class TestHealthRegistration:
             await server.startup()
 
             from starlette.requests import Request
+
             route = next(
-                r for r in server.mcp._additional_http_routes
+                r
+                for r in server.mcp._additional_http_routes
                 if getattr(r, "path", None) == "/health"
             )
             response = await route.endpoint(Request({"type": "http"}))
             assert response.status_code == 503
             import json
+
             body = json.loads(response.body)
             assert body["status"] == "degraded"
 
@@ -164,15 +178,21 @@ class TestHealthRegistration:
         # Live verification: the FastMCP instance exposes all 12 cmux tools.
         tools = list(await server.mcp.list_tools())
         assert len(tools) == 12, (
-            f"expected 12 tools registered, got {len(tools)}: "
-            f"{[t.name for t in tools]}"
+            f"expected 12 tools registered, got {len(tools)}: {[t.name for t in tools]}"
         )
         names = {t.name for t in tools}
         expected = {
-            "cmux_list_workspaces", "cmux_list_notifications", "cmux_identify",
-            "cmux_send_keys", "cmux_notify",
-            "cmux_browser_navigate", "cmux_browser_snapshot", "cmux_browser_evaluate",
-            "cmux_browser_click", "cmux_browser_type", "cmux_browser_tabs",
+            "cmux_list_workspaces",
+            "cmux_list_notifications",
+            "cmux_identify",
+            "cmux_send_keys",
+            "cmux_notify",
+            "cmux_browser_navigate",
+            "cmux_browser_snapshot",
+            "cmux_browser_evaluate",
+            "cmux_browser_click",
+            "cmux_browser_type",
+            "cmux_browser_tabs",
             "cmux_browser_console",
         }
         assert names == expected
@@ -198,7 +218,9 @@ class TestPidManagement:
         acquire_pid_file(path)  # should overwrite stale
         assert int(path.read_text().strip()) > 0
 
-    def test_acquire_handles_permission_error_on_unreadable_pid_file(self, tmp_path: Path) -> None:
+    def test_acquire_handles_permission_error_on_unreadable_pid_file(
+        self, tmp_path: Path
+    ) -> None:
         """H10 regression: stale-but-unreadable PID files (e.g. owned by another
         user) raise PermissionError on os.kill(pid, 0). The fix treats all
         OSError variants as 'stale' so we overwrite rather than crash."""

@@ -5,6 +5,7 @@ Per spec §"Logging":
   - Oneiric logger only; no print(), no stdlib logging
   - mock-mode WARN banner unless CMUX_MCP_MOCK_ACKNOWLEDGED=1 or PYTEST_CURRENT_TEST is set
 """
+
 from __future__ import annotations
 
 from oneiric.core.logging import get_logger
@@ -20,7 +21,7 @@ def maybe_warn_mock_mode(config: object) -> None:
       - PYTEST_CURRENT_TEST is set (running under pytest)
     """
     import os
-    import sys
+
     if not getattr(config, "mock_mode", False):
         return
     if os.environ.get("CMUX_MCP_MOCK_ACKNOWLEDGED") == "1":
@@ -36,6 +37,7 @@ def maybe_warn_mock_mode(config: object) -> None:
 def redact_url_query_string(url: str) -> str:
     """Strip query string from URL for safe logging (removes ?token=...&api_key=...)."""
     from urllib.parse import urlsplit, urlunsplit
+
     parts = urlsplit(url)
     if not parts.query:
         return url
@@ -47,4 +49,4 @@ def redact_expression(expr: str) -> str:
     return f"<len={len(expr)}, head={expr[:32]!r}>"
 
 
-__all__ = ["maybe_warn_mock_mode", "redact_url_query_string", "redact_expression"]
+__all__ = ["maybe_warn_mock_mode", "redact_expression", "redact_url_query_string"]

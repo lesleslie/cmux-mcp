@@ -1,4 +1,5 @@
 """Tests for src/cmux_mcp/config.py."""
+
 from __future__ import annotations
 
 import os
@@ -29,7 +30,9 @@ class TestEnvPrefix:
         assert cfg.port == 9999
 
     def test_env_var_overrides_host(self) -> None:
-        with patch.dict(os.environ, {"CMUX_MCP_HOST": "0.0.0.0", "CMUX_MCP_AUTH_ENABLED": "true"}):
+        with patch.dict(
+            os.environ, {"CMUX_MCP_HOST": "0.0.0.0", "CMUX_MCP_AUTH_ENABLED": "true"}
+        ):
             cfg = CmuxMCPConfig()
         assert cfg.host == "0.0.0.0"
         assert cfg.auth_enabled is True
@@ -48,12 +51,18 @@ class TestMockModeAutoFlip:
         assert cfg.mock_mode is False
 
     def test_explicit_mock_mode_true_respected_on_any_platform(self) -> None:
-        with patch.object(sys, "platform", "linux"), patch.dict(os.environ, {"CMUX_MCP_MOCK": "true"}):
+        with (
+            patch.object(sys, "platform", "linux"),
+            patch.dict(os.environ, {"CMUX_MCP_MOCK": "true"}),
+        ):
             cfg = CmuxMCPConfig()
         assert cfg.mock_mode is True
 
     def test_explicit_mock_mode_false_on_non_darwin_respected(self) -> None:
-        with patch.object(sys, "platform", "linux"), patch.dict(os.environ, {"CMUX_MCP_MOCK": "false"}):
+        with (
+            patch.object(sys, "platform", "linux"),
+            patch.dict(os.environ, {"CMUX_MCP_MOCK": "false"}),
+        ):
             cfg = CmuxMCPConfig()
         assert cfg.mock_mode is False  # explicit setting wins over auto-flip
 
@@ -61,15 +70,25 @@ class TestMockModeAutoFlip:
 @pytest.mark.unit
 class TestAuthRequiredForNonLoopback:
     def test_non_loopback_without_auth_raises(self) -> None:
-        with patch.object(sys, "platform", "darwin"), patch.dict(
-            os.environ, {"CMUX_MCP_HOST": "0.0.0.0", "CMUX_MCP_AUTH_ENABLED": "false"}, clear=False
-        ):
-            with pytest.raises(Exception):  # ValueError from model_validator
-                CmuxMCPConfig()
+        with (
+            patch.object(sys, "platform", "darwin"),
+            patch.dict(
+                os.environ,
+                {"CMUX_MCP_HOST": "0.0.0.0", "CMUX_MCP_AUTH_ENABLED": "false"},
+                clear=False,
+            ),
+            pytest.raises(ValueError),
+        ):  # Pydantic ValidationError (subclass of ValueError) from model_validator
+            CmuxMCPConfig()
 
     def test_non_loopback_with_auth_allowed(self) -> None:
-        with patch.object(sys, "platform", "darwin"), patch.dict(
-            os.environ, {"CMUX_MCP_HOST": "0.0.0.0", "CMUX_MCP_AUTH_ENABLED": "true"}, clear=False
+        with (
+            patch.object(sys, "platform", "darwin"),
+            patch.dict(
+                os.environ,
+                {"CMUX_MCP_HOST": "0.0.0.0", "CMUX_MCP_AUTH_ENABLED": "true"},
+                clear=False,
+            ),
         ):
             cfg = CmuxMCPConfig()
         assert cfg.host == "0.0.0.0"

@@ -167,6 +167,7 @@ markers = [
 
 ```python
 """cmux-mcp: MCP server for cmux terminal automation (macOS only)."""
+
 from __future__ import annotations
 
 import importlib.metadata
@@ -182,6 +183,7 @@ __all__ = ["__version__", "DEFAULT_PORT"]
 
 ```python
 """cmux-mcp entry point."""
+
 from __future__ import annotations
 
 from mcp_common.cli import MCPServerCLIFactory
@@ -212,6 +214,7 @@ if __name__ == "__main__":
 
 ```python
 """cli.py — placeholder; lifecycle CLI is wired via __main__.py + mcp-common."""
+
 from __future__ import annotations
 ```
 
@@ -306,6 +309,7 @@ cd /Users/les/Projects/cmux-mcp && git add . && git -c user.name=les -c user.ema
 
 ```python
 """Tests for src/cmux_mcp/errors.py — the CmuxError hierarchy."""
+
 from __future__ import annotations
 
 import pytest
@@ -337,7 +341,9 @@ class TestCmuxErrorHierarchy:
             CmuxProtocolError,
             CmuxValidationError,
         ):
-            assert issubclass(cls, CmuxError), f"{cls.__name__} must inherit from CmuxError"
+            assert issubclass(cls, CmuxError), (
+                f"{cls.__name__} must inherit from CmuxError"
+            )
 
     def test_cmux_error_carries_context(self) -> None:
         exc = CmuxTransportError("socket eof", context={"surface_id": "surface:abc"})
@@ -391,6 +397,7 @@ Each exception carries:
 
 to_tool_error() converts to the ToolError envelope shape used by all 12 tools.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -440,7 +447,11 @@ class CmuxOnlyAccessDeniedError(CmuxError):
 
     tool_error_code = "cmux_only_access_denied"
 
-    def __init__(self, message: str = "cmux-mcp must be launched from inside a cmux terminal pane", **kw: Any) -> None:
+    def __init__(
+        self,
+        message: str = "cmux-mcp must be launched from inside a cmux terminal pane",
+        **kw: Any,
+    ) -> None:
         super().__init__(message, retryable=False, **kw)
 
 
@@ -449,7 +460,11 @@ class UnsupportedPlatformError(CmuxError):
 
     tool_error_code = "unsupported_platform"
 
-    def __init__(self, message: str = "cmux-mcp requires macOS; set CMUX_MCP_MOCK=1 for Linux/Windows CI", **kw: Any) -> None:
+    def __init__(
+        self,
+        message: str = "cmux-mcp requires macOS; set CMUX_MCP_MOCK=1 for Linux/Windows CI",
+        **kw: Any,
+    ) -> None:
         super().__init__(message, retryable=False, **kw)
 
 
@@ -512,6 +527,7 @@ cd /Users/les/Projects/cmux-mcp && git add src/cmux_mcp/errors.py tests/unit/tes
 
 ```python
 """Tests for src/cmux_mcp/models.py — domain models."""
+
 from __future__ import annotations
 
 import pytest
@@ -531,7 +547,10 @@ from cmux_mcp.models import (
 @pytest.mark.unit
 class TestSurfaceIdPatterns:
     def test_surface_id_pattern_accepts_canonical(self) -> None:
-        assert Surface(id="surface:abc123", kind=SurfaceKind.TERMINAL).id == "surface:abc123"
+        assert (
+            Surface(id="surface:abc123", kind=SurfaceKind.TERMINAL).id
+            == "surface:abc123"
+        )
 
     def test_surface_id_pattern_rejects_path_traversal(self) -> None:
         with pytest.raises(ValidationError):
@@ -559,7 +578,9 @@ class TestTreeStructure:
     def test_workspace_contains_panes(self) -> None:
         surface = Surface(id="surface:abc", kind=SurfaceKind.TERMINAL, focused=True)
         pane = Pane(id="pane:1", surfaces=[surface])
-        ws = Workspace(id="workspace:1", title="My Workspace", focused=True, panes=[pane])
+        ws = Workspace(
+            id="workspace:1", title="My Workspace", focused=True, panes=[pane]
+        )
         assert ws.panes[0].surfaces[0].id == "surface:abc"
         assert ws.panes[0].surfaces[0].focused is True
 
@@ -583,7 +604,9 @@ class TestNotification:
         assert n.surface_id == "surface:abc"
 
     def test_notification_created_at_serializes_iso8601(self) -> None:
-        n = Notification(id="notification:xyz", title="Test", created_at="2026-09-16T12:34:56Z")
+        n = Notification(
+            id="notification:xyz", title="Test", created_at="2026-09-16T12:34:56Z"
+        )
         dumped = n.model_dump(mode="json")
         assert dumped["created_at"] == "2026-09-16T12:34:56+00:00"
 ```
@@ -600,6 +623,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'cmux_mcp.models'`.
 
 Per spec §"Pydantic models → Domain models".
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -709,7 +733,9 @@ from cmux_mcp.models import (
 @pytest.mark.unit
 class TestBrowserModels:
     def test_browser_snapshot_round_trip(self) -> None:
-        snap = BrowserSnapshot(snapshot="[ref=e1] button Sign in", captured_at="2026-09-16T12:34:56Z")
+        snap = BrowserSnapshot(
+            snapshot="[ref=e1] button Sign in", captured_at="2026-09-16T12:34:56Z"
+        )
         assert "Sign in" in snap.snapshot
 
     def test_console_level_strenum(self) -> None:
@@ -720,11 +746,15 @@ class TestBrowserModels:
         assert ConsoleLevel.DEBUG == "debug"
 
     def test_console_message_optional_source(self) -> None:
-        msg = ConsoleMessage(level=ConsoleLevel.LOG, text="hello", timestamp="2026-09-16T12:34:56Z")
+        msg = ConsoleMessage(
+            level=ConsoleLevel.LOG, text="hello", timestamp="2026-09-16T12:34:56Z"
+        )
         assert msg.source is None
 
     def test_browser_tab_url_https_only(self) -> None:
-        tab = BrowserTab(id="t1", url="https://example.com", title="Example", active=True)
+        tab = BrowserTab(
+            id="t1", url="https://example.com", title="Example", active=True
+        )
         assert str(tab.url) == "https://example.com/"
 
     def test_browser_tab_url_rejects_javascript(self) -> None:
@@ -737,7 +767,10 @@ class TestBrowserModels:
 
     def test_browser_console_result_partial_failure_flags(self) -> None:
         result = BrowserConsoleResult(
-            messages=[], errors=[], partial_failure=True, failed_subcalls=["errors_list"]
+            messages=[],
+            errors=[],
+            partial_failure=True,
+            failed_subcalls=["errors_list"],
         )
         assert result.partial_failure is True
         assert result.failed_subcalls == ["errors_list"]
@@ -796,7 +829,9 @@ class BrowserConsoleResult(BaseModel):
     messages: list[ConsoleMessage]
     errors: list[BrowserError]
     truncated: bool = False
-    partial_failure: bool = False  # True if one of console list / errors list sub-call failed
+    partial_failure: bool = (
+        False  # True if one of console list / errors list sub-call failed
+    )
     failed_subcalls: list[Literal["console_list", "errors_list"]] = []
 
 
@@ -867,7 +902,7 @@ class TestSendKeysInput:
 
     def test_key_literal_enum_validates_known_only(self) -> None:
         with pytest.raises(ValidationError):
-            SendKeysInput(surface_id="surface:abc", key="Eneter")  # typo
+            SendKeysInput(surface_id="surface:abc", key="Enter")  # typo
 
 
 @pytest.mark.unit
@@ -926,13 +961,38 @@ from pydantic import model_validator
 class SendKeysInput(BaseModel):
     surface_id: Annotated[str, Field(pattern=SURFACE_ID_PATTERN)]
     text: str | None = None
-    key: Literal[
-        "enter", "tab", "escape", "backspace", "delete",
-        "up", "down", "left", "right", "home", "end",
-        "pageup", "pagedown", "f1", "f2", "f3", "f4",
-        "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
-        "space", "return",
-    ] | None = None
+    key: (
+        Literal[
+            "enter",
+            "tab",
+            "escape",
+            "backspace",
+            "delete",
+            "up",
+            "down",
+            "left",
+            "right",
+            "home",
+            "end",
+            "pageup",
+            "pagedown",
+            "f1",
+            "f2",
+            "f3",
+            "f4",
+            "f5",
+            "f6",
+            "f7",
+            "f8",
+            "f9",
+            "f10",
+            "f11",
+            "f12",
+            "space",
+            "return",
+        ]
+        | None
+    ) = None
 
     @model_validator(mode="after")
     def _exactly_one_of_text_or_key(self) -> "SendKeysInput":
@@ -1056,7 +1116,9 @@ class TestToolOutputModels:
         assert out.ok is True
 
     def test_notify_output_serializes_datetime(self) -> None:
-        out = NotifyOutput(notification_id="notification:xyz", created_at="2026-09-16T12:34:56Z")
+        out = NotifyOutput(
+            notification_id="notification:xyz", created_at="2026-09-16T12:34:56Z"
+        )
         assert "2026" in out.model_dump(mode="json")["created_at"]
 
     def test_browser_navigate_output_truncated_flag(self) -> None:
@@ -1093,7 +1155,9 @@ class TestToolOutputModels:
         # When ok=False, result must be None (discriminated union)
         with pytest.raises(ValidationError):
             BrowserEvaluateErrorResult(
-                error="x", error_kind="runtime_exception", result="should not be allowed"
+                error="x",
+                error_kind="runtime_exception",
+                result="should not be allowed",
             )  # type: ignore[call-arg]
 ```
 
@@ -1192,6 +1256,7 @@ cd /Users/les/Projects/cmux-mcp && git add src/cmux_mcp/models.py tests/unit/tes
 
 ```python
 """Tests for src/cmux_mcp/config.py."""
+
 from __future__ import annotations
 
 import os
@@ -1222,7 +1287,9 @@ class TestEnvPrefix:
         assert cfg.port == 9999
 
     def test_env_var_overrides_host(self) -> None:
-        with patch.dict(os.environ, {"CMUX_MCP_HOST": "0.0.0.0", "CMUX_MCP_AUTH_ENABLED": "true"}):
+        with patch.dict(
+            os.environ, {"CMUX_MCP_HOST": "0.0.0.0", "CMUX_MCP_AUTH_ENABLED": "true"}
+        ):
             cfg = CmuxMCPConfig()
         assert cfg.host == "0.0.0.0"
         assert cfg.auth_enabled is True
@@ -1241,12 +1308,18 @@ class TestMockModeAutoFlip:
         assert cfg.mock_mode is False
 
     def test_explicit_mock_mode_true_respected_on_any_platform(self) -> None:
-        with patch.object(sys, "platform", "linux"), patch.dict(os.environ, {"CMUX_MCP_MOCK": "true"}):
+        with (
+            patch.object(sys, "platform", "linux"),
+            patch.dict(os.environ, {"CMUX_MCP_MOCK": "true"}),
+        ):
             cfg = CmuxMCPConfig()
         assert cfg.mock_mode is True
 
     def test_explicit_mock_mode_false_on_non_darwin_respected(self) -> None:
-        with patch.object(sys, "platform", "linux"), patch.dict(os.environ, {"CMUX_MCP_MOCK": "false"}):
+        with (
+            patch.object(sys, "platform", "linux"),
+            patch.dict(os.environ, {"CMUX_MCP_MOCK": "false"}),
+        ):
             cfg = CmuxMCPConfig()
         assert cfg.mock_mode is False  # explicit setting wins over auto-flip
 
@@ -1254,15 +1327,25 @@ class TestMockModeAutoFlip:
 @pytest.mark.unit
 class TestAuthRequiredForNonLoopback:
     def test_non_loopback_without_auth_raises(self) -> None:
-        with patch.object(sys, "platform", "darwin"), patch.dict(
-            os.environ, {"CMUX_MCP_HOST": "0.0.0.0", "CMUX_MCP_AUTH_ENABLED": "false"}, clear=False
+        with (
+            patch.object(sys, "platform", "darwin"),
+            patch.dict(
+                os.environ,
+                {"CMUX_MCP_HOST": "0.0.0.0", "CMUX_MCP_AUTH_ENABLED": "false"},
+                clear=False,
+            ),
         ):
             with pytest.raises(Exception):  # ValueError from model_validator
                 CmuxMCPConfig()
 
     def test_non_loopback_with_auth_allowed(self) -> None:
-        with patch.object(sys, "platform", "darwin"), patch.dict(
-            os.environ, {"CMUX_MCP_HOST": "0.0.0.0", "CMUX_MCP_AUTH_ENABLED": "true"}, clear=False
+        with (
+            patch.object(sys, "platform", "darwin"),
+            patch.dict(
+                os.environ,
+                {"CMUX_MCP_HOST": "0.0.0.0", "CMUX_MCP_AUTH_ENABLED": "true"},
+                clear=False,
+            ),
         ):
             cfg = CmuxMCPConfig()
         assert cfg.host == "0.0.0.0"
@@ -1303,6 +1386,7 @@ Per spec decision log row 5 + 25: direct `BaseSettings` subclass with explicit
 `SettingsConfigDict` for orthogonality — not strictly because OneiricMCPConfig
 is broken, but because it makes `env_prefix` precedence explicit and unit-testable.
 """
+
 from __future__ import annotations
 
 import os
@@ -1342,7 +1426,9 @@ class CmuxMCPConfig(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     shutdown_grace_seconds: float = 10.0
     auth_enabled: bool = False
-    pid_file_path: Path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "cmux-mcp" / "cmux-mcp.pid"
+    pid_file_path: Path = (
+        Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "cmux-mcp" / "cmux-mcp.pid"
+    )
     health_warmup_seconds: float = 60.0
 
     def _resolve_xdg(self) -> Path:
@@ -1350,12 +1436,19 @@ class CmuxMCPConfig(BaseSettings):
         return Path(xdg) / "cmux-mcp" / "cmux-mcp.pid"
 
     @classmethod
-    def model_validate(cls, obj: object = None, *, strict: bool | None = None, **kw: object):  # type: ignore[override]
+    def model_validate(
+        cls, obj: object = None, *, strict: bool | None = None, **kw: object
+    ):  # type: ignore[override]
         # Recompute pid_file_path after env load so XDG_RUNTIME_DIR set in env takes effect
         if obj is None:
             obj = {}
         if isinstance(obj, dict):
-            obj = {**obj, "pid_file_path": Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "cmux-mcp" / "cmux-mcp.pid"}
+            obj = {
+                **obj,
+                "pid_file_path": Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp"))
+                / "cmux-mcp"
+                / "cmux-mcp.pid",
+            }
         return super().model_validate(obj, strict=strict, **kw)  # type: ignore[arg-type]
 
 
@@ -1388,6 +1481,7 @@ cd /Users/les/Projects/cmux-mcp && git add src/cmux_mcp/config.py tests/unit/tes
 
 ```python
 """Tests for src/cmux_mcp/cli_discovery.py."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -1425,12 +1519,17 @@ class TestProbeOrder:
 
     def test_applications_path_fallback(self, tmp_path: Path) -> None:
         # Build fake /Applications/cmux.app/Contents/Resources/bin/cmux
-        bin_path = tmp_path / "Applications" / "cmux.app" / "Contents" / "Resources" / "bin"
+        bin_path = (
+            tmp_path / "Applications" / "cmux.app" / "Contents" / "Resources" / "bin"
+        )
         bin_path.mkdir(parents=True)
         cmux = bin_path / "cmux"
         cmux.touch()
         cmux.chmod(0o755)
-        with patch("cmux_mcp.cli_discovery._DEFAULT_APP_BUNDLE", tmp_path / "Applications" / "cmux.app"):
+        with patch(
+            "cmux_mcp.cli_discovery._DEFAULT_APP_BUNDLE",
+            tmp_path / "Applications" / "cmux.app",
+        ):
             with patch.dict("os.environ", {"PATH": ""}, clear=False):
                 result = discover_cmux_cli()
         assert result == cmux
@@ -1443,13 +1542,20 @@ class TestProbeOrder:
             (cask / "cmux").chmod(0o755)
         with patch("cmux_mcp.cli_discovery._CASKROOM_PATHS", [tmp_path]):
             with patch.dict("os.environ", {"PATH": ""}, clear=False):
-                with patch("cmux_mcp.cli_discovery._DEFAULT_APP_BUNDLE", Path("/nonexistent")):
+                with patch(
+                    "cmux_mcp.cli_discovery._DEFAULT_APP_BUNDLE", Path("/nonexistent")
+                ):
                     result = discover_cmux_cli()
         assert "2.0.0" in str(result)  # highest version wins
 
     def test_not_found_raises_with_listing(self, tmp_path: Path) -> None:
-        with patch("cmux_mcp.cli_discovery._DEFAULT_APP_BUNDLE", tmp_path / "nonexistent-app"):
-            with patch("cmux_mcp.cli_discovery._CASKROOM_PATHS", [tmp_path / "nonexistent-cask"]):
+        with patch(
+            "cmux_mcp.cli_discovery._DEFAULT_APP_BUNDLE", tmp_path / "nonexistent-app"
+        ):
+            with patch(
+                "cmux_mcp.cli_discovery._CASKROOM_PATHS",
+                [tmp_path / "nonexistent-cask"],
+            ):
                 with patch.dict("os.environ", {"PATH": ""}, clear=False):
                     with pytest.raises(CmuxBinaryNotFoundError) as exc_info:
                         discover_cmux_cli()
@@ -1477,6 +1583,7 @@ Per spec §"cmux CLI binary discovery":
   6. ~/Library/Developer/Xcode/DerivedData/cmux-*/Build/Products/{Debug,Release}/cmux.app/.../bin/cmux
   7. fail with CmuxBinaryNotFoundError listing probed paths
 """
+
 from __future__ import annotations
 
 import os
@@ -1503,16 +1610,24 @@ def _candidate_paths() -> list[Path]:
         if caskroom.exists() and caskroom.is_dir():
             versions = sorted(
                 [p for p in caskroom.iterdir() if p.is_dir()],
-                key=lambda p: tuple(int(x) if x.isdigit() else 0 for x in p.name.split(".")),
+                key=lambda p: tuple(
+                    int(x) if x.isdigit() else 0 for x in p.name.split(".")
+                ),
                 reverse=True,
             )
             for v in versions:
-                candidates.append(v / "cmux.app" / "Contents" / "Resources" / "bin" / "cmux")
+                candidates.append(
+                    v / "cmux.app" / "Contents" / "Resources" / "bin" / "cmux"
+                )
     derived = Path.home() / "Library" / "Developer" / "Xcode" / "DerivedData"
     if derived.exists():
-        for d in derived.glob("cmux-*/Build/Products/Debug/cmux.app/Contents/Resources/bin/cmux"):
+        for d in derived.glob(
+            "cmux-*/Build/Products/Debug/cmux.app/Contents/Resources/bin/cmux"
+        ):
             candidates.append(d)
-        for d in derived.glob("cmux-*/Build/Products/Release/cmux.app/Contents/Resources/bin/cmux"):
+        for d in derived.glob(
+            "cmux-*/Build/Products/Release/cmux.app/Contents/Resources/bin/cmux"
+        ):
             candidates.append(d)
     return candidates
 
@@ -1601,6 +1716,7 @@ cd /Users/les/Projects/cmux-mcp && git add src/cmux_mcp/cli_discovery.py tests/u
 
 ```python
 """Tests for CmuxMockTransport — fixture-driven canned responses."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -1666,6 +1782,7 @@ Per spec §"Architecture" and §"Transport layer details":
   CmuxCliTransport    — single-shot subprocess, semaphore + per-surface lock
   CmuxMockTransport   — implements both Protocol shapes for test isolation
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -1744,7 +1861,9 @@ class CmuxMockTransport:
 
     def add_response(self, method: str, params: dict | None, response: dict) -> None:
         """Register an extra canned response (per-test override)."""
-        self._extra_responses.append({"method": method, "params": params or {}, "response": response})
+        self._extra_responses.append(
+            {"method": method, "params": params or {}, "response": response}
+        )
 
     async def request(
         self,
@@ -1757,9 +1876,13 @@ class CmuxMockTransport:
             if _match_fixture(entry, method, params):
                 response = entry["response"]
                 if "error" in response:
-                    raise CmuxProtocolError(response["error"].get("message", "cmux error"))
+                    raise CmuxProtocolError(
+                        response["error"].get("message", "cmux error")
+                    )
                 return response["result"]
-        raise CmuxProtocolError(f"mock: no canned response for method={method!r} params={params!r}")
+        raise CmuxProtocolError(
+            f"mock: no canned response for method={method!r} params={params!r}"
+        )
 
     async def call(
         self,
@@ -1822,6 +1945,7 @@ cd /Users/les/Projects/cmux-mcp && git add src/cmux_mcp/client.py tests/fixtures
 
 ```python
 """Tests for CmuxSocketTransport — connection + state machine."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -1876,6 +2000,7 @@ class TestReconnectBackoff:
         # After max attempts, state should be disconnected
         # Allow time for backoff retries
         import asyncio
+
         await asyncio.sleep(0.5)
         assert transport.state == "disconnected"
 ```
@@ -1918,7 +2043,9 @@ class CmuxSocketTransport:
         self._config = config
         self._reader = reader
         self._writer = writer
-        self._state: Literal["connected", "reconnecting", "disconnected"] = "disconnected"
+        self._state: Literal["connected", "reconnecting", "disconnected"] = (
+            "disconnected"
+        )
         self._lock = asyncio.Lock()
         self._next_id = 1
         self._session_epoch = str(uuid.uuid4())
@@ -1939,9 +2066,14 @@ class CmuxSocketTransport:
     async def _open(self) -> None:
         """Open socket, send ping, start reader task."""
         try:
-            self._reader, self._writer = await asyncio.open_unix_connection(str(self._config.socket_path))
+            self._reader, self._writer = await asyncio.open_unix_connection(
+                str(self._config.socket_path)
+            )
         except (OSError, FileNotFoundError) as exc:
-            raise CmuxTransportError(f"cannot open socket: {exc}", context={"socket_path": str(self._config.socket_path)})
+            raise CmuxTransportError(
+                f"cannot open socket: {exc}",
+                context={"socket_path": str(self._config.socket_path)},
+            )
         self._state = "connected"
         self._reader_task = asyncio.create_task(self._read_loop())
 
@@ -1954,6 +2086,7 @@ class CmuxSocketTransport:
                 if not line:
                     raise EOFError("socket closed")
                 import json
+
                 payload = json.loads(line.decode("utf-8"))
                 req_id = payload.get("id")
                 if req_id is None:
@@ -1961,10 +2094,14 @@ class CmuxSocketTransport:
                 fut = self._pending.pop(req_id, None)
                 if fut is not None and not fut.done():
                     if payload.get("ok") is False:
-                        fut.set_exception(CmuxProtocolError(payload.get("error", {}).get("message", "cmux error")))
+                        fut.set_exception(
+                            CmuxProtocolError(
+                                payload.get("error", {}).get("message", "cmux error")
+                            )
+                        )
                     else:
                         fut.set_result(payload.get("result", {}))
-        except (EOFError, asyncio.IncompleteReadError):
+        except EOFError, asyncio.IncompleteReadError:
             self._state = "reconnecting"
             await self._reconnect_with_backoff()
 
@@ -1973,15 +2110,17 @@ class CmuxSocketTransport:
         while attempt < self._config.reconnect_max_attempts:
             delay = min(
                 self._config.reconnect_max_delay_seconds,
-                self._config.reconnect_initial_delay_seconds * (2 ** attempt),
+                self._config.reconnect_initial_delay_seconds * (2**attempt),
             )
-            jittered = delay * 0.5  # half-jitter (deterministic in tests; real impl uses random.uniform)
+            jittered = (
+                delay * 0.5
+            )  # half-jitter (deterministic in tests; real impl uses random.uniform)
             await asyncio.sleep(jittered)
             attempt += 1
             try:
                 await self._open()
                 return
-            except (OSError, FileNotFoundError, CmuxTransportError):
+            except OSError, FileNotFoundError, CmuxTransportError:
                 continue
         self._state = "disconnected"
 
@@ -1994,12 +2133,20 @@ class CmuxSocketTransport:
     ) -> dict:
         """Send JSON-RPC request, await response."""
         if self._state != "connected":
-            raise CmuxTransportError(f"socket state is {self._state!r}, cannot send request")
+            raise CmuxTransportError(
+                f"socket state is {self._state!r}, cannot send request"
+            )
         import json
+
         async with self._lock:
             req_id = self._next_id
             self._next_id += 1
-            payload = {"id": str(req_id), "method": method, "params": params or {}, "session_epoch": self._session_epoch}
+            payload = {
+                "id": str(req_id),
+                "method": method,
+                "params": params or {},
+                "session_epoch": self._session_epoch,
+            }
             assert self._writer is not None
             self._writer.write(json.dumps(payload).encode("utf-8") + b"\n")
             await self._writer.drain()
@@ -2089,13 +2236,16 @@ class TestJsonRpcCorrelation:
 
         def write(payload: bytes) -> None:
             import json
+
             decoded = json.loads(payload.decode("utf-8"))
             lines_received.append(json.dumps(responses[str(decoded["id"])]))
             captured.append(decoded["method"])
 
         mock_writer.write = write
 
-        with patch("asyncio.open_unix_connection", return_value=(mock_reader, mock_writer)):
+        with patch(
+            "asyncio.open_unix_connection", return_value=(mock_reader, mock_writer)
+        ):
             transport = await CmuxSocketTransport.connect(config)
 
         # Issue two concurrent requests
@@ -2133,6 +2283,7 @@ cd /Users/les/Projects/cmux-mcp && git add tests/unit/test_transport_socket.py &
 
 ```python
 """Tests for CmuxCliTransport — subprocess invocation + timeout + cleanup."""
+
 from __future__ import annotations
 
 import asyncio
@@ -2150,7 +2301,9 @@ class TestSubprocessInvocation:
     async def test_call_returns_cli_result(self) -> None:
         config = CmuxMCPConfig()
         transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
-        with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+        with patch(
+            "asyncio.create_subprocess_exec", new_callable=AsyncMock
+        ) as mock_exec:
             mock_proc = AsyncMock()
             mock_proc.communicate = AsyncMock(return_value=(b"hello\n", b""))
             mock_proc.returncode = 0
@@ -2164,7 +2317,9 @@ class TestSubprocessInvocation:
     async def test_call_timeout_kills_subprocess(self) -> None:
         config = CmuxMCPConfig(cli_timeout_seconds=0.1)
         transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
-        with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+        with patch(
+            "asyncio.create_subprocess_exec", new_callable=AsyncMock
+        ) as mock_exec:
             mock_proc = AsyncMock()
 
             async def hanging_communicate() -> tuple[bytes, bytes]:
@@ -2189,13 +2344,17 @@ class TestConcurrencyLimits:
         active = 0
         max_active = 0
 
-        async def fake_call(args: list[str], *, timeout: float | None = None) -> CliResult:
+        async def fake_call(
+            args: list[str], *, timeout: float | None = None
+        ) -> CliResult:
             nonlocal active, max_active
             active += 1
             max_active = max(max_active, active)
             await asyncio.sleep(0.05)
             active -= 1
-            return CliResult(ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0)
+            return CliResult(
+                ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0
+            )
 
         transport.call = fake_call  # type: ignore[method-assign]
         await asyncio.gather(*[transport.call(["cmux"]) for _ in range(10)])
@@ -2216,10 +2375,24 @@ import os
 import signal as _signal
 
 
-SUBPROCESS_ENV_ALLOWLIST = frozenset({
-    "PATH", "LANG", "LC_ALL", "LC_COLLATE", "LC_CTYPE", "LC_MONETARY", "LC_NUMERIC", "LC_TIME",
-    "TMPDIR", "USER", "HOME", "CMUX_SOCKET_PATH", "CMUX_SURFACE_ID", "CMUX_WORKSPACE_ID",
-})
+SUBPROCESS_ENV_ALLOWLIST = frozenset(
+    {
+        "PATH",
+        "LANG",
+        "LC_ALL",
+        "LC_COLLATE",
+        "LC_CTYPE",
+        "LC_MONETARY",
+        "LC_NUMERIC",
+        "LC_TIME",
+        "TMPDIR",
+        "USER",
+        "HOME",
+        "CMUX_SOCKET_PATH",
+        "CMUX_SURFACE_ID",
+        "CMUX_WORKSPACE_ID",
+    }
+)
 
 
 def _filtered_env() -> dict[str, str]:
@@ -2365,21 +2538,31 @@ class TestPerSurfaceLock:
         transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
         order: list[str] = []
 
-        async def fake_call(args: list[str], *, timeout: float | None = None) -> CliResult:
+        async def fake_call(
+            args: list[str], *, timeout: float | None = None
+        ) -> CliResult:
             order.append(f"start:{args[2]}")
             await asyncio.sleep(0.05)
             order.append(f"end:{args[2]}")
-            return CliResult(ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0)
+            return CliResult(
+                ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0
+            )
 
         transport.call = fake_call  # type: ignore[method-assign]
         await asyncio.gather(
-            transport.call(["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]),
-            transport.call(["cmux", "browser", "--surface", "surface:abc", "click", "e1"]),
+            transport.call(
+                ["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]
+            ),
+            transport.call(
+                ["cmux", "browser", "--surface", "surface:abc", "click", "e1"]
+            ),
         )
         # Same surface: must be start,end,start,end (not interleaved)
         assert order == [
-            "start:u1", "end:u1",
-            "start:e1", "end:e1",
+            "start:u1",
+            "end:u1",
+            "start:e1",
+            "end:e1",
         ], f"Expected serialized execution; got {order}"
 
     @pytest.mark.asyncio
@@ -2388,21 +2571,32 @@ class TestPerSurfaceLock:
         transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
         order: list[str] = []
 
-        async def fake_call(args: list[str], *, timeout: float | None = None) -> CliResult:
+        async def fake_call(
+            args: list[str], *, timeout: float | None = None
+        ) -> CliResult:
             order.append(f"start:{args[2]}")
             await asyncio.sleep(0.05)
             order.append(f"end:{args[2]}")
-            return CliResult(ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0)
+            return CliResult(
+                ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0
+            )
 
         transport.call = fake_call  # type: ignore[method-assign]
         await asyncio.gather(
-            transport.call(["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]),
-            transport.call(["cmux", "browser", "--surface", "surface:xyz", "navigate", "u2"]),
+            transport.call(
+                ["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]
+            ),
+            transport.call(
+                ["cmux", "browser", "--surface", "surface:xyz", "navigate", "u2"]
+            ),
         )
         # Different surfaces: must be interleaved
-        assert order == ["start:u1", "start:u2", "end:u1", "end:u2"] or \
-               order == ["start:u2", "start:u1", "end:u1", "end:u2"], \
-               f"Expected parallel execution; got {order}"
+        assert order == ["start:u1", "start:u2", "end:u1", "end:u2"] or order == [
+            "start:u2",
+            "start:u1",
+            "end:u1",
+            "end:u2",
+        ], f"Expected parallel execution; got {order}"
 ```
 
 - [ ] **Step 2: Run test; verify pass**
@@ -2431,6 +2625,7 @@ cd /Users/les/Projects/cmux-mcp && git add tests/unit/test_transport_cli.py && \
 
 ```python
 """Tests for CmuxMCPServer — lifecycle mixin wiring."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -2446,7 +2641,9 @@ from cmux_mcp.server import CmuxMCPServer
 @pytest.mark.unit
 class TestLifecycle:
     @pytest.mark.asyncio
-    async def test_startup_initializes_transports_and_registers_tools(self, tmp_path: Path) -> None:
+    async def test_startup_initializes_transports_and_registers_tools(
+        self, tmp_path: Path
+    ) -> None:
         sock = tmp_path / "cmux.sock"
         sock.touch()
         config = CmuxMCPConfig(socket_path=sock, cmux_cli_path=tmp_path / "cmux")
@@ -2498,6 +2695,7 @@ Per spec §"Server class":
   - shutdown() closes transports, captures shutdown snapshot
   - get_app() returns the FastMCP HTTP app
 """
+
 from __future__ import annotations
 
 from fastmcp import FastMCP
@@ -2522,13 +2720,18 @@ class CmuxMCPServer(BaseOneiricServerMixin):
         else:
             self.socket_transport = await CmuxSocketTransport.connect(self.config)
             from cmux_mcp.cli_discovery import discover_cmux_cli
+
             cli_path = self.config.cmux_cli_path or discover_cmux_cli()
             self.cli_transport = CmuxCliTransport(self.config, binary_path=cli_path)
         # Tool registration and /health wiring will be added in Tasks 17 + 16
-        self._create_startup_snapshot(custom_components={
-            "cmux_socket": self.socket_transport.state if hasattr(self.socket_transport, "state") else "n/a",
-            "cmux_cli": str(getattr(self.cli_transport, "_binary_path", "n/a")),
-        })
+        self._create_startup_snapshot(
+            custom_components={
+                "cmux_socket": self.socket_transport.state
+                if hasattr(self.socket_transport, "state")
+                else "n/a",
+                "cmux_cli": str(getattr(self.cli_transport, "_binary_path", "n/a")),
+            }
+        )
 
     async def shutdown(self) -> None:
         if self.cli_transport:
@@ -2570,6 +2773,7 @@ cd /Users/les/Projects/cmux-mcp && git add src/cmux_mcp/server.py tests/unit/tes
 
 ```python
 """Tests for cmux_mcp/health.py — /health feed components."""
+
 from __future__ import annotations
 
 import pytest
@@ -2647,6 +2851,7 @@ Implementation note: rather than subclassing mcp_common.health.feed.HealthFeedSt
 (whose API surface is what we exposed to /health), we provide a minimal compatible shape.
 HealthFeedComponent provides `name`, `snapshot()`, and the record_*() methods.
 """
+
 from __future__ import annotations
 
 import time
@@ -2797,6 +3002,7 @@ class TestHealthRegistration:
     @pytest.mark.asyncio
     async def test_startup_registers_health_route(self) -> None:
         from fastmcp import FastMCP
+
         config = CmuxMCPConfig()
         server = CmuxMCPServer(config)
         server.socket_transport = CmuxMockTransport()
@@ -2895,6 +3101,7 @@ cd /Users/les/Projects/cmux-mcp && git add src/cmux_mcp/server.py tests/unit/tes
 
 ```python
 """Tests for cmux_mcp/_tools.py — registration scaffolding."""
+
 from __future__ import annotations
 
 import pytest
@@ -2924,10 +3131,17 @@ class TestToolRegistration:
         assert len(tools) == 12
         names = {t.name for t in tools.values()}
         expected = {
-            "cmux_list_workspaces", "cmux_list_notifications", "cmux_identify",
-            "cmux_send_keys", "cmux_notify",
-            "cmux_browser_navigate", "cmux_browser_snapshot", "cmux_browser_evaluate",
-            "cmux_browser_click", "cmux_browser_type", "cmux_browser_tabs",
+            "cmux_list_workspaces",
+            "cmux_list_notifications",
+            "cmux_identify",
+            "cmux_send_keys",
+            "cmux_notify",
+            "cmux_browser_navigate",
+            "cmux_browser_snapshot",
+            "cmux_browser_evaluate",
+            "cmux_browser_click",
+            "cmux_browser_type",
+            "cmux_browser_tabs",
             "cmux_browser_console",
         }
         assert names == expected
@@ -2951,6 +3165,7 @@ Per spec §"_tools.py — registration pattern":
   Each tool body follows the try/except/else/return pattern per spec §"/health
   envelope wiring → Tool feed placement".
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -2965,6 +3180,7 @@ from cmux_mcp.health import TOOL_NAMES, ToolFeedComponent
 
 def build_tool_feed_components() -> list[ToolFeedComponent]:
     from cmux_mcp.health import build_tool_feed_components as _impl
+
     return _impl()
 
 
@@ -2994,6 +3210,7 @@ __all__ = ["TOOL_NAMES", "build_tool_feed_components", "register_tools"]
 
 ```python
 """cmux_mcp.tools.socket_tools — registers the 5 socket-direct tools."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -3017,6 +3234,7 @@ def register_socket_tools(
 
 ```python
 """cmux_mcp.tools.browser_tools — registers the 7 browser CLI tools."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -3046,6 +3264,7 @@ Update `register_socket_tools` to register a single stub tool first to verify th
 ```python
 # Replace src/cmux_mcp/tools/socket_tools.py content with:
 
+
 def register_socket_tools(
     mcp: "FastMCP",
     socket: "CmuxSocketTransportProtocol",
@@ -3053,6 +3272,7 @@ def register_socket_tools(
 ) -> None:
     """Register the 5 socket-direct tools."""
     from cmux_mcp.tools import socket_impl  # noqa: F401 — placeholder for full impl
+
     # Tool implementations added in Task 18
     _register_cmux_list_workspaces(mcp, socket, tool_feeds)
 
@@ -3063,6 +3283,7 @@ def _register_cmux_list_workspaces(
     tool_feeds: dict[str, "ToolFeedComponent"],
 ) -> None:
     """Stub for cmux_list_workspaces — full impl in Task 18."""
+
     @mcp.tool(name="cmux_list_workspaces", description="[stub] list workspaces")
     async def cmux_list_workspaces() -> dict[str, object]:
         return {"workspaces": []}
@@ -3104,6 +3325,7 @@ cd /Users/les/Projects/cmux-mcp && git add src/cmux_mcp/_tools.py src/cmux_mcp/t
 
 ```python
 """Tests for the 5 socket-direct tools."""
+
 from __future__ import annotations
 
 import pytest
@@ -3133,12 +3355,29 @@ class TestCmuxListWorkspaces:
     @pytest.mark.asyncio
     async def test_returns_typed_output(self, feeds: dict[str, object]) -> None:
         from fastmcp import FastMCP
+
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
         # Add canned response
-        socket.add_response("workspace.list", {}, {"result": {"workspaces": [{"id": "workspace:1", "title": "W1", "panes": []}]}})
-        socket.add_response("surface.list", {"workspace_id": "workspace:1"}, {"result": {"surfaces": []}})
-        socket.add_response("pane.surfaces", {"workspace_id": "workspace:1"}, {"result": {"pane_id": "pane:1", "surfaces": []}})
+        socket.add_response(
+            "workspace.list",
+            {},
+            {
+                "result": {
+                    "workspaces": [{"id": "workspace:1", "title": "W1", "panes": []}]
+                }
+            },
+        )
+        socket.add_response(
+            "surface.list",
+            {"workspace_id": "workspace:1"},
+            {"result": {"surfaces": []}},
+        )
+        socket.add_response(
+            "pane.surfaces",
+            {"workspace_id": "workspace:1"},
+            {"result": {"pane_id": "pane:1", "surfaces": []}},
+        )
         register_socket_tools(mcp, socket, feeds)
         tools = mcp._tool_manager._tools
         result = await tools["cmux_list_workspaces"].fn()
@@ -3146,8 +3385,11 @@ class TestCmuxListWorkspaces:
         assert result.workspaces[0].id == "workspace:1"
 
     @pytest.mark.asyncio
-    async def test_socket_error_returns_tool_error(self, feeds: dict[str, object]) -> None:
+    async def test_socket_error_returns_tool_error(
+        self, feeds: dict[str, object]
+    ) -> None:
         from fastmcp import FastMCP
+
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
         socket.add_response("workspace.list", {}, {"error": {"message": "socket gone"}})
@@ -3164,24 +3406,38 @@ class TestCmuxSendKeys:
     async def test_exactly_one_validation(self, feeds: dict[str, object]) -> None:
         from fastmcp import FastMCP
         from cmux_mcp.errors import CmuxValidationError
+
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
-        socket.add_response("surface.send_text", {"surface_id": "surface:abc", "text": "x"}, {"result": {"ok": True}})
+        socket.add_response(
+            "surface.send_text",
+            {"surface_id": "surface:abc", "text": "x"},
+            {"result": {"ok": True}},
+        )
         register_socket_tools(mcp, socket, feeds)
         tools = mcp._tool_manager._tools
         # both text and key should fail validation (caught by model_validator)
         with pytest.raises(Exception):  # ValidationError
-            await tools["cmux_send_keys"].fn(surface_id="surface:abc", text="x", key="enter")
+            await tools["cmux_send_keys"].fn(
+                surface_id="surface:abc", text="x", key="enter"
+            )
 
     @pytest.mark.asyncio
     async def test_typed_output(self, feeds: dict[str, object]) -> None:
         from fastmcp import FastMCP
+
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
-        socket.add_response("surface.send_text", {"surface_id": "surface:abc", "text": "hello"}, {"result": {"ok": True}})
+        socket.add_response(
+            "surface.send_text",
+            {"surface_id": "surface:abc", "text": "hello"},
+            {"result": {"ok": True}},
+        )
         register_socket_tools(mcp, socket, feeds)
         tools = mcp._tool_manager._tools
-        result = await tools["cmux_send_keys"].fn(surface_id="surface:abc", text="hello")
+        result = await tools["cmux_send_keys"].fn(
+            surface_id="surface:abc", text="hello"
+        )
         assert isinstance(result, SendKeysOutput)
         assert result.surface_id == "surface:abc"
         assert result.ok is True
@@ -3192,9 +3448,19 @@ class TestCmuxNotify:
     @pytest.mark.asyncio
     async def test_returns_notification_id(self, feeds: dict[str, object]) -> None:
         from fastmcp import FastMCP
+
         mcp = FastMCP(name="test")
         socket = CmuxMockTransport()
-        socket.add_response("notification.create", {"title": "T"}, {"result": {"notification_id": "notification:xyz", "created_at": "2026-09-16T12:00:00Z"}})
+        socket.add_response(
+            "notification.create",
+            {"title": "T"},
+            {
+                "result": {
+                    "notification_id": "notification:xyz",
+                    "created_at": "2026-09-16T12:00:00Z",
+                }
+            },
+        )
         register_socket_tools(mcp, socket, feeds)
         tools = mcp._tool_manager._tools
         result = await tools["cmux_notify"].fn(title="T")
@@ -3225,6 +3491,7 @@ wiring → Tool feed placement":
         state.record_success()
         return result
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -3246,9 +3513,15 @@ def _success(state: "ToolFeedComponent") -> None:
 def _error(state: "ToolFeedComponent", exc: Exception):
     state.record_error()
     from cmux_mcp.errors import CmuxError
+
     if isinstance(exc, CmuxError):
         return exc.to_tool_error()
-    return {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+    return {
+        "code": "internal_error",
+        "message": str(exc),
+        "retryable": False,
+        "data": None,
+    }
 
 
 def register_socket_tools(
@@ -3271,7 +3544,9 @@ def register_socket_tools(
     @mcp.tool(
         name="cmux_list_workspaces",
         description="List all workspaces with their panes and surfaces.",
-        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+        annotations=ToolAnnotations(
+            readOnlyHint=True, idempotentHint=True, openWorldHint=True
+        ),
     )
     async def cmux_list_workspaces() -> ListWorkspacesOutput:
         state = tool_feeds["tool.cmux_list_workspaces"]
@@ -3282,31 +3557,50 @@ def register_socket_tools(
             workspaces = []
             for ws in ws_data.get("workspaces", []):
                 ws_id = ws["id"]
-                surf_data = await socket.request("surface.list", {"workspace_id": ws_id})
-                pane_data = await socket.request("pane.surfaces", {"workspace_id": ws_id})
+                surf_data = await socket.request(
+                    "surface.list", {"workspace_id": ws_id}
+                )
+                pane_data = await socket.request(
+                    "pane.surfaces", {"workspace_id": ws_id}
+                )
                 # Build nested model
                 from cmux_mcp.models import Workspace, Pane, Surface
-                workspaces.append(Workspace(
-                    id=ws["id"],
-                    title=ws.get("title", ""),
-                    focused=ws.get("focused", False),
-                    panes=[Pane(
-                        id=p["id"],
-                        surfaces=[Surface(
-                            id=s["id"],
-                            kind=SurfaceKind(s["kind"]),
-                            cwd=s.get("cwd"),
-                            focused=s.get("focused", False),
-                        ) for s in p.get("surfaces", [])],
-                    ) for p in pane_data.get("panes", [])],
-                ))
+
+                workspaces.append(
+                    Workspace(
+                        id=ws["id"],
+                        title=ws.get("title", ""),
+                        focused=ws.get("focused", False),
+                        panes=[
+                            Pane(
+                                id=p["id"],
+                                surfaces=[
+                                    Surface(
+                                        id=s["id"],
+                                        kind=SurfaceKind(s["kind"]),
+                                        cwd=s.get("cwd"),
+                                        focused=s.get("focused", False),
+                                    )
+                                    for s in p.get("surfaces", [])
+                                ],
+                            )
+                            for p in pane_data.get("panes", [])
+                        ],
+                    )
+                )
             result = ListWorkspacesOutput(workspaces=workspaces)
         except Exception as exc:
             state.record_error()
             from cmux_mcp.errors import CmuxError
+
             if isinstance(exc, CmuxError):
                 return exc.to_tool_error()
-            return {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+            return {
+                "code": "internal_error",
+                "message": str(exc),
+                "retryable": False,
+                "data": None,
+            }
         else:
             state.record_success()
             return result
@@ -3314,21 +3608,32 @@ def register_socket_tools(
     @mcp.tool(
         name="cmux_list_notifications",
         description="List pending cmux notifications.",
-        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+        annotations=ToolAnnotations(
+            readOnlyHint=True, idempotentHint=True, openWorldHint=True
+        ),
     )
     async def cmux_list_notifications() -> ListNotificationsOutput:
         state = tool_feeds["tool.cmux_list_notifications"]
         state.record_cycle()
         try:
             from cmux_mcp.models import Notification
+
             data = await socket.request("notification.list")
-            result = ListNotificationsOutput(notifications=[Notification(**n) for n in data.get("notifications", [])])
+            result = ListNotificationsOutput(
+                notifications=[Notification(**n) for n in data.get("notifications", [])]
+            )
         except Exception as exc:
             state.record_error()
             from cmux_mcp.errors import CmuxError
+
             if isinstance(exc, CmuxError):
                 return exc.to_tool_error()
-            return {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+            return {
+                "code": "internal_error",
+                "message": str(exc),
+                "retryable": False,
+                "data": None,
+            }
         else:
             state.record_success()
             return result
@@ -3336,7 +3641,9 @@ def register_socket_tools(
     @mcp.tool(
         name="cmux_identify",
         description="Return the focused window/workspace/pane/surface context.",
-        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True),
+        annotations=ToolAnnotations(
+            readOnlyHint=True, idempotentHint=True, openWorldHint=True
+        ),
     )
     async def cmux_identify() -> IdentifyOutput:
         state = tool_feeds["tool.cmux_identify"]
@@ -3347,9 +3654,15 @@ def register_socket_tools(
         except Exception as exc:
             state.record_error()
             from cmux_mcp.errors import CmuxError
+
             if isinstance(exc, CmuxError):
                 return exc.to_tool_error()
-            return {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+            return {
+                "code": "internal_error",
+                "message": str(exc),
+                "retryable": False,
+                "data": None,
+            }
         else:
             state.record_success()
             return result
@@ -3365,22 +3678,35 @@ def register_socket_tools(
         key: str | None = None,
     ) -> SendKeysOutput:
         from cmux_mcp.models import SendKeysInput as _Validated
+
         # Pydantic validation will raise on invalid input
         validated = _Validated(surface_id=surface_id, text=text, key=key)
         state = tool_feeds["tool.cmux_send_keys"]
         state.record_cycle()
         try:
             if validated.text is not None:
-                await socket.request("surface.send_text", {"surface_id": validated.surface_id, "text": validated.text})
+                await socket.request(
+                    "surface.send_text",
+                    {"surface_id": validated.surface_id, "text": validated.text},
+                )
             else:
-                await socket.request("surface.send_key", {"surface_id": validated.surface_id, "key": validated.key})
+                await socket.request(
+                    "surface.send_key",
+                    {"surface_id": validated.surface_id, "key": validated.key},
+                )
             result = SendKeysOutput(surface_id=validated.surface_id)
         except Exception as exc:
             state.record_error()
             from cmux_mcp.errors import CmuxError
+
             if isinstance(exc, CmuxError):
                 return exc.to_tool_error()
-            return {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+            return {
+                "code": "internal_error",
+                "message": str(exc),
+                "retryable": False,
+                "data": None,
+            }
         else:
             state.record_success()
             return result
@@ -3397,18 +3723,30 @@ def register_socket_tools(
         surface_id: str | None = None,
     ) -> NotifyOutput:
         from cmux_mcp.models import NotifyInput as _Validated
-        validated = _Validated(title=title, subtitle=subtitle, body=body, surface_id=surface_id)
+
+        validated = _Validated(
+            title=title, subtitle=subtitle, body=body, surface_id=surface_id
+        )
         state = tool_feeds["tool.cmux_notify"]
         state.record_cycle()
         try:
-            data = await socket.request("notification.create", validated.model_dump(mode="json", exclude_none=True))
+            data = await socket.request(
+                "notification.create",
+                validated.model_dump(mode="json", exclude_none=True),
+            )
             result = NotifyOutput(**data)
         except Exception as exc:
             state.record_error()
             from cmux_mcp.errors import CmuxError
+
             if isinstance(exc, CmuxError):
                 return exc.to_tool_error()
-            return {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+            return {
+                "code": "internal_error",
+                "message": str(exc),
+                "retryable": False,
+                "data": None,
+            }
         else:
             state.record_success()
             return result
@@ -3457,18 +3795,23 @@ cd /Users/les/Projects/cmux-mcp && git add src/cmux_mcp/tools/socket_tools.py te
 ```python
 # Append to test_browser_tools.py (create with one test for now):
 
+
 @pytest.mark.unit
 class TestCmuxBrowserNavigate:
     @pytest.mark.asyncio
     async def test_returns_typed_output(self, feeds: dict[str, object]) -> None:
         from fastmcp import FastMCP
         from cmux_mcp.tools.browser_tools import register_browser_tools
+
         mcp = FastMCP(name="test")
         cli = CmuxMockTransport()
         register_browser_tools(mcp, cli, feeds)
         tools = mcp._tool_manager._tools
-        result = await tools["cmux_browser_navigate"].fn(surface_id="surface:abc", url="https://example.com")
+        result = await tools["cmux_browser_navigate"].fn(
+            surface_id="surface:abc", url="https://example.com"
+        )
         from cmux_mcp.models import BrowserNavigateOutput
+
         assert isinstance(result, BrowserNavigateOutput)
         assert str(result.url) == "https://example.com/"
 ```
@@ -3509,15 +3852,25 @@ def register_browser_tools(
         snapshot_after: bool = False,
     ) -> BrowserNavigateOutput:
         from cmux_mcp.models import BrowserNavigateInput as _Validated
-        validated = BrowserNavigateInput(surface_id=surface_id, url=url, snapshot_after=snapshot_after)
+
+        validated = BrowserNavigateInput(
+            surface_id=surface_id, url=url, snapshot_after=snapshot_after
+        )
         state = tool_feeds["tool.cmux_browser_navigate"]
         state.record_cycle()
         try:
-            args = ["browser", "--surface", validated.surface_id, "navigate", str(validated.url)]
+            args = [
+                "browser",
+                "--surface",
+                validated.surface_id,
+                "navigate",
+                str(validated.url),
+            ]
             if validated.snapshot_after:
                 args.append("--snapshot-after")
             result = await cli.call(args)
             from cmux_mcp.models import HttpUrl
+
             return BrowserNavigateOutput(
                 ok=True,
                 url=HttpUrl(str(validated.url)),
@@ -3527,9 +3880,15 @@ def register_browser_tools(
         except Exception as exc:
             state.record_error()
             from cmux_mcp.errors import CmuxError
+
             if isinstance(exc, CmuxError):
                 return exc.to_tool_error()
-            return {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
+            return {
+                "code": "internal_error",
+                "message": str(exc),
+                "retryable": False,
+                "data": None,
+            }
         else:
             state.record_success()
             # Note: success path returns inside try, not else — fix:
@@ -3539,39 +3898,54 @@ def register_browser_tools(
 Re-read the try/except/else pattern. The success return must be in the else block, not inside try. Let me fix:
 
 ```python
-    @mcp.tool(
-        name="cmux_browser_navigate",
-        description="Navigate the browser surface to a URL.",
-        annotations=ToolAnnotations(destructiveHint=True, openWorldHint=True),
+@mcp.tool(
+    name="cmux_browser_navigate",
+    description="Navigate the browser surface to a URL.",
+    annotations=ToolAnnotations(destructiveHint=True, openWorldHint=True),
+)
+async def cmux_browser_navigate(
+    surface_id: str,
+    url: str,
+    snapshot_after: bool = False,
+) -> BrowserNavigateOutput:
+    from cmux_mcp.models import BrowserNavigateInput as _Validated, HttpUrl
+
+    validated = BrowserNavigateInput(
+        surface_id=surface_id, url=url, snapshot_after=snapshot_after
     )
-    async def cmux_browser_navigate(
-        surface_id: str,
-        url: str,
-        snapshot_after: bool = False,
-    ) -> BrowserNavigateOutput:
-        from cmux_mcp.models import BrowserNavigateInput as _Validated, HttpUrl
-        validated = BrowserNavigateInput(surface_id=surface_id, url=url, snapshot_after=snapshot_after)
-        state = tool_feeds["tool.cmux_browser_navigate"]
-        state.record_cycle()
-        args = ["browser", "--surface", validated.surface_id, "navigate", str(validated.url)]
-        if validated.snapshot_after:
-            args.append("--snapshot-after")
-        try:
-            cli_result = await cli.call(args)
-        except Exception as exc:
-            state.record_error()
-            from cmux_mcp.errors import CmuxError
-            if isinstance(exc, CmuxError):
-                return exc.to_tool_error()
-            return {"code": "internal_error", "message": str(exc), "retryable": False, "data": None}
-        else:
-            state.record_success()
-            return BrowserNavigateOutput(
-                ok=True,
-                url=HttpUrl(str(validated.url)),
-                snapshot=None,
-                truncated=len(cli_result.stderr) > 4_096,
-            )
+    state = tool_feeds["tool.cmux_browser_navigate"]
+    state.record_cycle()
+    args = [
+        "browser",
+        "--surface",
+        validated.surface_id,
+        "navigate",
+        str(validated.url),
+    ]
+    if validated.snapshot_after:
+        args.append("--snapshot-after")
+    try:
+        cli_result = await cli.call(args)
+    except Exception as exc:
+        state.record_error()
+        from cmux_mcp.errors import CmuxError
+
+        if isinstance(exc, CmuxError):
+            return exc.to_tool_error()
+        return {
+            "code": "internal_error",
+            "message": str(exc),
+            "retryable": False,
+            "data": None,
+        }
+    else:
+        state.record_success()
+        return BrowserNavigateOutput(
+            ok=True,
+            url=HttpUrl(str(validated.url)),
+            snapshot=None,
+            truncated=len(cli_result.stderr) > 4_096,
+        )
 ```
 
 - [ ] **Step 4: Run test; verify pass**
@@ -3603,16 +3977,24 @@ class TestCmuxBrowserSnapshot:
         from cmux_mcp.tools.browser_tools import register_browser_tools
         from cmux_mcp.client import CliResult
         from unittest.mock import AsyncMock
+
         mcp = FastMCP(name="test")
         cli = CmuxMockTransport()
         # Mock returns snapshot text in stdout
-        cli.call = AsyncMock(return_value=CliResult(
-            ok=True, stdout=b"[ref=e1] button Sign in", stderr=b"", returncode=0, duration_ms=10
-        ))
+        cli.call = AsyncMock(
+            return_value=CliResult(
+                ok=True,
+                stdout=b"[ref=e1] button Sign in",
+                stderr=b"",
+                returncode=0,
+                duration_ms=10,
+            )
+        )
         register_browser_tools(mcp, cli, feeds)
         tools = mcp._tool_manager._tools
         result = await tools["cmux_browser_snapshot"].fn(surface_id="surface:abc")
         from cmux_mcp.models import BrowserSnapshot
+
         assert isinstance(result, BrowserSnapshot)
         assert "Sign in" in result.snapshot
 
@@ -3626,19 +4008,25 @@ class TestCmuxBrowserTabs:
         from cmux_mcp.tools.browser_tools import register_browser_tools
         from cmux_mcp.client import CliResult
         from unittest.mock import AsyncMock
+
         mcp = FastMCP(name="test")
         cli = CmuxMockTransport()
-        tabs_json = json.dumps([
-            {"id": "t1", "url": "https://a.example", "title": "A", "active": False},
-            {"id": "t2", "url": "https://b.example", "title": "B", "active": True},
-        ]).encode()
-        cli.call = AsyncMock(return_value=CliResult(
-            ok=True, stdout=tabs_json, stderr=b"", returncode=0, duration_ms=10
-        ))
+        tabs_json = json.dumps(
+            [
+                {"id": "t1", "url": "https://a.example", "title": "A", "active": False},
+                {"id": "t2", "url": "https://b.example", "title": "B", "active": True},
+            ]
+        ).encode()
+        cli.call = AsyncMock(
+            return_value=CliResult(
+                ok=True, stdout=tabs_json, stderr=b"", returncode=0, duration_ms=10
+            )
+        )
         register_browser_tools(mcp, cli, feeds)
         tools = mcp._tool_manager._tools
         result = await tools["cmux_browser_tabs"].fn(surface_id="surface:abc")
         from cmux_mcp.models import BrowserTabsOutput
+
         assert isinstance(result, BrowserTabsOutput)
         assert len(result.tabs) == 2
         assert result.tabs[0].id == "t1"
@@ -3732,40 +4120,64 @@ cd /Users/les/Projects/cmux-mcp && git add src/cmux_mcp/tools/browser_tools.py t
 @pytest.mark.unit
 class TestCmuxBrowserEvaluate:
     @pytest.mark.asyncio
-    async def test_returns_typed_result_on_value(self, feeds: dict[str, object]) -> None:
+    async def test_returns_typed_result_on_value(
+        self, feeds: dict[str, object]
+    ) -> None:
         import json
         from fastmcp import FastMCP
         from cmux_mcp.tools.browser_tools import register_browser_tools
         from cmux_mcp.client import CliResult
         from unittest.mock import AsyncMock
+
         mcp = FastMCP(name="test")
         cli = CmuxMockTransport()
-        cli.call = AsyncMock(return_value=CliResult(
-            ok=True, stdout=json.dumps({"ok": True, "result": 42}).encode(), stderr=b"", returncode=0, duration_ms=10
-        ))
+        cli.call = AsyncMock(
+            return_value=CliResult(
+                ok=True,
+                stdout=json.dumps({"ok": True, "result": 42}).encode(),
+                stderr=b"",
+                returncode=0,
+                duration_ms=10,
+            )
+        )
         register_browser_tools(mcp, cli, feeds)
         tools = mcp._tool_manager._tools
-        result = await tools["cmux_browser_evaluate"].fn(surface_id="surface:abc", expression="document.title.length")
+        result = await tools["cmux_browser_evaluate"].fn(
+            surface_id="surface:abc", expression="document.title.length"
+        )
         from cmux_mcp.models import BrowserEvaluateResult
+
         assert isinstance(result, BrowserEvaluateResult)
         assert result.ok is True
         assert result.result == 42
 
     @pytest.mark.asyncio
-    async def test_returns_error_envelope_on_runtime_exception(self, feeds: dict[str, object]) -> None:
+    async def test_returns_error_envelope_on_runtime_exception(
+        self, feeds: dict[str, object]
+    ) -> None:
         from fastmcp import FastMCP
         from cmux_mcp.tools.browser_tools import register_browser_tools
         from cmux_mcp.client import CliResult
         from unittest.mock import AsyncMock
+
         mcp = FastMCP(name="test")
         cli = CmuxMockTransport()
-        cli.call = AsyncMock(return_value=CliResult(
-            ok=False, stdout=b"", stderr=b"ReferenceError: x is not defined", returncode=1, duration_ms=10
-        ))
+        cli.call = AsyncMock(
+            return_value=CliResult(
+                ok=False,
+                stdout=b"",
+                stderr=b"ReferenceError: x is not defined",
+                returncode=1,
+                duration_ms=10,
+            )
+        )
         register_browser_tools(mcp, cli, feeds)
         tools = mcp._tool_manager._tools
-        result = await tools["cmux_browser_evaluate"].fn(surface_id="surface:abc", expression="x.y.z")
+        result = await tools["cmux_browser_evaluate"].fn(
+            surface_id="surface:abc", expression="x.y.z"
+        )
         from cmux_mcp.models import BrowserEvaluateErrorResult
+
         assert isinstance(result, BrowserEvaluateErrorResult)
         assert result.ok is False
         assert result.error_kind == "runtime_exception"
@@ -3774,13 +4186,16 @@ class TestCmuxBrowserEvaluate:
     async def test_expression_length_validated(self, feeds: dict[str, object]) -> None:
         from fastmcp import FastMCP
         from cmux_mcp.tools.browser_tools import register_browser_tools
+
         mcp = FastMCP(name="test")
         cli = CmuxMockTransport()
         register_browser_tools(mcp, cli, feeds)
         tools = mcp._tool_manager._tools
         # Empty expression should fail validation
         with pytest.raises(Exception):
-            await tools["cmux_browser_evaluate"].fn(surface_id="surface:abc", expression="")
+            await tools["cmux_browser_evaluate"].fn(
+                surface_id="surface:abc", expression=""
+            )
 ```
 
 - [ ] **Step 2: Run tests; expect fail**
@@ -3872,13 +4287,21 @@ class TestCmuxBrowserClick:
         from cmux_mcp.tools.browser_tools import register_browser_tools
         from cmux_mcp.client import CliResult
         from unittest.mock import AsyncMock
+
         mcp = FastMCP(name="test")
         cli = CmuxMockTransport()
-        cli.call = AsyncMock(return_value=CliResult(ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=10))
+        cli.call = AsyncMock(
+            return_value=CliResult(
+                ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=10
+            )
+        )
         register_browser_tools(mcp, cli, feeds)
         tools = mcp._tool_manager._tools
-        result = await tools["cmux_browser_click"].fn(surface_id="surface:abc", selector="button#submit")
+        result = await tools["cmux_browser_click"].fn(
+            surface_id="surface:abc", selector="button#submit"
+        )
         from cmux_mcp.models import BrowserClickOutput
+
         assert isinstance(result, BrowserClickOutput)
         assert result.ok is True
 
@@ -3891,13 +4314,21 @@ class TestCmuxBrowserType:
         from cmux_mcp.tools.browser_tools import register_browser_tools
         from cmux_mcp.client import CliResult
         from unittest.mock import AsyncMock
+
         mcp = FastMCP(name="test")
         cli = CmuxMockTransport()
-        cli.call = AsyncMock(return_value=CliResult(ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=10))
+        cli.call = AsyncMock(
+            return_value=CliResult(
+                ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=10
+            )
+        )
         register_browser_tools(mcp, cli, feeds)
         tools = mcp._tool_manager._tools
-        result = await tools["cmux_browser_type"].fn(surface_id="surface:abc", selector="input#q", text="cmux")
+        result = await tools["cmux_browser_type"].fn(
+            surface_id="surface:abc", selector="input#q", text="cmux"
+        )
         from cmux_mcp.models import BrowserTypeOutput
+
         assert isinstance(result, BrowserTypeOutput)
         assert result.ok is True
 
@@ -3905,27 +4336,39 @@ class TestCmuxBrowserType:
 @pytest.mark.unit
 class TestCmuxBrowserConsole:
     @pytest.mark.asyncio
-    async def test_returns_typed_output_aggregated(self, feeds: dict[str, object]) -> None:
+    async def test_returns_typed_output_aggregated(
+        self, feeds: dict[str, object]
+    ) -> None:
         import json
         from fastmcp import FastMCP
         from cmux_mcp.tools.browser_tools import register_browser_tools
         from cmux_mcp.client import CliResult
         from unittest.mock import AsyncMock
+
         mcp = FastMCP(name="test")
         cli = CmuxMockTransport()
-        async def fake_call(args: list[str], *, timeout: float | None = None) -> CliResult:
+
+        async def fake_call(
+            args: list[str], *, timeout: float | None = None
+        ) -> CliResult:
             if "errors" in args:
-                return CliResult(ok=True, stdout=b"[]", stderr=b"", returncode=0, duration_ms=5)
+                return CliResult(
+                    ok=True, stdout=b"[]", stderr=b"", returncode=0, duration_ms=5
+                )
             return CliResult(
                 ok=True,
                 stdout=json.dumps([{"level": "info", "text": "hello"}]).encode(),
-                stderr=b"", returncode=0, duration_ms=5,
+                stderr=b"",
+                returncode=0,
+                duration_ms=5,
             )
+
         cli.call = AsyncMock(side_effect=fake_call)
         register_browser_tools(mcp, cli, feeds)
         tools = mcp._tool_manager._tools
         result = await tools["cmux_browser_console"].fn(surface_id="surface:abc")
         from cmux_mcp.models import BrowserConsoleResult
+
         assert isinstance(result, BrowserConsoleResult)
         assert len(result.messages) == 1
         assert result.partial_failure is False
@@ -4112,6 +4555,7 @@ cd /Users/les/Projects/cmux-mcp && git add src/cmux_mcp/tools/browser_tools.py t
 
 ```python
 """Tests for mock-mode WARN banner + PII logging exclusion."""
+
 from __future__ import annotations
 
 import logging
@@ -4126,27 +4570,35 @@ from cmux_mcp.logging_setup import maybe_warn_mock_mode
 
 @pytest.mark.unit
 class TestMockModeBanner:
-    def test_banner_emitted_when_mock_active_without_ack(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_banner_emitted_when_mock_active_without_ack(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         cfg = CmuxMCPConfig(mock_mode=True)
         with caplog.at_level(logging.WARNING, logger="cmux_mcp.logging_setup"):
             maybe_warn_mock_mode(cfg)
         assert any("MOCK MODE" in rec.message for rec in caplog.records)
 
-    def test_banner_suppressed_when_acknowledged(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_banner_suppressed_when_acknowledged(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         with patch.dict(os.environ, {"CMUX_MCP_MOCK_ACKNOWLEDGED": "1"}):
             cfg = CmuxMCPConfig(mock_mode=True)
         with caplog.at_level(logging.WARNING, logger="cmux_mcp.logging_setup"):
             maybe_warn_mock_mode(cfg)
         assert not any("MOCK MODE" in rec.message for rec in caplog.records)
 
-    def test_banner_suppressed_when_pytest_current_test(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_banner_suppressed_when_pytest_current_test(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         with patch.dict(os.environ, {"PYTEST_CURRENT_TEST": "tests/test_x.py::test_y"}):
             cfg = CmuxMCPConfig(mock_mode=True)
         with caplog.at_level(logging.WARNING, logger="cmux_mcp.logging_setup"):
             maybe_warn_mock_mode(cfg)
         assert not any("MOCK MODE" in rec.message for rec in caplog.records)
 
-    def test_no_banner_when_mock_inactive(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_no_banner_when_mock_inactive(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         cfg = CmuxMCPConfig(mock_mode=False)
         with caplog.at_level(logging.WARNING, logger="cmux_mcp.logging_setup"):
             maybe_warn_mock_mode(cfg)
@@ -4168,6 +4620,7 @@ Per spec §"Logging":
   - Oneiric logger only; no print(), no stdlib logging
   - mock-mode WARN banner unless CMUX_MCP_MOCK_ACKNOWLEDGED=1 or PYTEST_CURRENT_TEST is set
 """
+
 from __future__ import annotations
 
 import logging
@@ -4198,6 +4651,7 @@ def maybe_warn_mock_mode(config: object) -> None:
 def redact_url_query_string(url: str) -> str:
     """Strip query string from URL for safe logging (removes ?token=...&api_key=...)."""
     from urllib.parse import urlsplit, urlunsplit
+
     parts = urlsplit(url)
     if not parts.query:
         return url
@@ -4298,8 +4752,10 @@ def acquire_pid_file(path: Path) -> None:
         try:
             existing_pid = int(path.read_text().strip())
             os.kill(existing_pid, 0)  # raises ProcessLookupError if dead
-            raise RuntimeError(f"PID file {path} is held by live process {existing_pid}")
-        except (ProcessLookupError, ValueError):
+            raise RuntimeError(
+                f"PID file {path} is held by live process {existing_pid}"
+            )
+        except ProcessLookupError, ValueError:
             # Stale — overwrite
             path.unlink()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -4358,6 +4814,7 @@ class TestGracefulShutdown:
         server.socket_transport = CmuxMockTransport()
         server.cli_transport = CmuxMockTransport()
         import time
+
         start = time.monotonic()
         await server.shutdown()
         elapsed = time.monotonic() - start
@@ -4389,12 +4846,16 @@ class TestSubprocessEnvFilter:
     def test_secret_keys_not_in_child_env(self) -> None:
         import os
         from cmux_mcp.client import _filtered_env
-        with patch.dict(os.environ, {
-            "MINIMAX_API_KEY": "sk-secret",
-            "MAHAVISHNU_AUTH_SECRET": "jwt-secret",
-            "PATH": "/usr/bin",
-            "CMUX_SOCKET_PATH": "/tmp/cmux.sock",
-        }):
+
+        with patch.dict(
+            os.environ,
+            {
+                "MINIMAX_API_KEY": "sk-secret",
+                "MAHAVISHNU_AUTH_SECRET": "jwt-secret",
+                "PATH": "/usr/bin",
+                "CMUX_SOCKET_PATH": "/tmp/cmux.sock",
+            },
+        ):
             env = _filtered_env()
         assert "MINIMAX_API_KEY" not in env
         assert "MAHAVISHNU_AUTH_SECRET" not in env
@@ -4618,11 +5079,3 @@ function the plan references would have caught all five in under 60 seconds.
 End-to-end smoke verified: `CMUX_MCP_MOCK=1 uv run cmux-mcp start` binds
 port 3061; `GET /health` returns JSON with 15 feed snapshots
 (2 transports + 1 mock_transport + 12 tool feeds).
-
-
-
-
-
-
-
-

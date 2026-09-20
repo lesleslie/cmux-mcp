@@ -1,4 +1,5 @@
 """Tests for CmuxCliTransport — subprocess invocation + timeout + cleanup."""
+
 from __future__ import annotations
 
 import asyncio
@@ -8,6 +9,7 @@ import pytest
 
 from cmux_mcp.client import CliResult, CmuxCliTransport
 from cmux_mcp.config import CmuxMCPConfig
+from cmux_mcp.errors import CmuxTimeoutError
 
 # Python 3.14 + AsyncMock __init__ creates an internal coroutine Py3.14 surfaces
 # as RuntimeWarning. Suppress at module level (upstream Python issue, not cmux-mcp).
@@ -20,7 +22,9 @@ class TestSubprocessInvocation:
     async def test_call_returns_cli_result(self) -> None:
         config = CmuxMCPConfig()
         transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
-        with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+        with patch(
+            "asyncio.create_subprocess_exec", new_callable=AsyncMock
+        ) as mock_exec:
             mock_proc = AsyncMock()
             mock_proc.communicate = AsyncMock(return_value=(b"hello\n", b""))
             mock_proc.returncode = 0
@@ -34,7 +38,9 @@ class TestSubprocessInvocation:
     async def test_call_timeout_kills_subprocess(self) -> None:
         config = CmuxMCPConfig(cli_timeout_seconds=0.1)
         transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
-        with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+        with patch(
+            "asyncio.create_subprocess_exec", new_callable=AsyncMock
+        ) as mock_exec:
             mock_proc = MagicMock()  # send_signal/wait are sync in production
 
             async def hanging_communicate() -> tuple[bytes, bytes]:
@@ -48,7 +54,7 @@ class TestSubprocessInvocation:
             # whether to kill. Simulate "still running" by setting it to None.
             mock_proc.returncode = None
             mock_exec.return_value = mock_proc
-            with pytest.raises(Exception):  # CmuxTimeoutError
+            with pytest.raises(CmuxTimeoutError):
                 await transport.call(["cmux", "--slow-op"])
         mock_proc.send_signal.assert_called()  # SIGTERM sent
 
@@ -76,7 +82,9 @@ class TestConcurrencyLimits:
             await asyncio.sleep(0.05)
             async with counter_lock:
                 active -= 1
-            return CliResult(ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0)
+            return CliResult(
+                ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0
+            )
 
         transport._invoke = counting_invoke  # type: ignore[method-assign]
         await asyncio.gather(*[transport.call(["cmux"]) for _ in range(10)])
@@ -91,13 +99,14 @@ class TestConcurrencyLimits:
         config = CmuxMCPConfig(cli_max_concurrent=8)
         transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
         # Patch _invoke to increment transport._active on entry.
-        original_invoke = transport._invoke
 
         async def counting_invoke(*_args: object, **_kwargs: object) -> CliResult:
             transport._active += 1
             try:
                 await asyncio.sleep(0.05)
-                return CliResult(ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0)
+                return CliResult(
+                    ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0
+                )
             finally:
                 transport._active -= 1
 
@@ -105,8 +114,12 @@ class TestConcurrencyLimits:
         # Two concurrent calls on the SAME surface — both should be counted
         # even though they're serialized by the per-surface lock.
         await asyncio.gather(
-            transport.call(["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]),
-            transport.call(["cmux", "browser", "--surface", "surface:abc", "click", "e1"]),
+            transport.call(
+                ["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]
+            ),
+            transport.call(
+                ["cmux", "browser", "--surface", "surface:abc", "click", "e1"]
+            ),
         )
         # The two surface-locked calls ran serially due to the per-surface lock,
         # so peak concurrent was 1. _active should still be incremented/decremented
@@ -125,22 +138,32 @@ class TestPerSurfaceLock:
 
         # Patch _invoke so call()'s per-surface lock still applies. Identify
         # each call by its surface_id (args[3] in the original positional layout).
-        async def tracking_invoke(args: list[str], *_a: object, **_kw: object) -> CliResult:
+        async def tracking_invoke(
+            args: list[str], *_a: object, **_kw: object
+        ) -> CliResult:
             surface_id = CmuxCliTransport._extract_surface_id(args) or "?"
             order.append(f"start:{surface_id}")
             await asyncio.sleep(0.05)
             order.append(f"end:{surface_id}")
-            return CliResult(ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0)
+            return CliResult(
+                ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0
+            )
 
         transport._invoke = tracking_invoke  # type: ignore[method-assign]
         await asyncio.gather(
-            transport.call(["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]),
-            transport.call(["cmux", "browser", "--surface", "surface:abc", "click", "e1"]),
+            transport.call(
+                ["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]
+            ),
+            transport.call(
+                ["cmux", "browser", "--surface", "surface:abc", "click", "e1"]
+            ),
         )
         # Same surface: must be start,end,start,end (not interleaved)
         assert order == [
-            "start:surface:abc", "end:surface:abc",
-            "start:surface:abc", "end:surface:abc",
+            "start:surface:abc",
+            "end:surface:abc",
+            "start:surface:abc",
+            "end:surface:abc",
         ], f"Expected serialized execution; got {order}"
 
     @pytest.mark.asyncio
@@ -150,21 +173,31 @@ class TestPerSurfaceLock:
         transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
         order: list[str] = []
 
-        async def tracking_invoke(args: list[str], *_a: object, **_kw: object) -> CliResult:
+        async def tracking_invoke(
+            args: list[str], *_a: object, **_kw: object
+        ) -> CliResult:
             surface_id = CmuxCliTransport._extract_surface_id(args) or "?"
             order.append(f"start:{surface_id}")
             await asyncio.sleep(0.05)
             order.append(f"end:{surface_id}")
-            return CliResult(ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0)
+            return CliResult(
+                ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0
+            )
 
         transport._invoke = tracking_invoke  # type: ignore[method-assign]
         await asyncio.gather(
-            transport.call(["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]),
-            transport.call(["cmux", "browser", "--surface", "surface:xyz", "navigate", "u2"]),
+            transport.call(
+                ["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]
+            ),
+            transport.call(
+                ["cmux", "browser", "--surface", "surface:xyz", "navigate", "u2"]
+            ),
         )
         # Different surfaces: must be interleaved (both starts before either end)
         starts = sum(1 for e in order if e.startswith("start:"))
-        ends_before_any_start = sum(1 for i, e in enumerate(order) if e.startswith("end:") and i < 2)
+        ends_before_any_start = sum(
+            1 for i, e in enumerate(order) if e.startswith("end:") and i < 2
+        )
         assert starts == 2 and ends_before_any_start == 0, (
             f"Expected parallel execution; got {order}"
         )
@@ -185,15 +218,16 @@ class TestSubprocessLifecycle:
         """
         config = CmuxMCPConfig(cli_timeout_seconds=30.0)
         transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
-        with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+        with patch(
+            "asyncio.create_subprocess_exec", new_callable=AsyncMock
+        ) as mock_exec:
             mock_proc = MagicMock()
             mock_proc.pid = 12345
 
             async def hanging_communicate() -> tuple[bytes, bytes]:
-                try:
-                    await asyncio.sleep(30)
-                except asyncio.CancelledError:
-                    raise
+                # No try/except — asyncio.sleep naturally propagates
+                # CancelledError; TRY203 forbids the no-op except: raise form.
+                await asyncio.sleep(30)
                 return (b"", b"")
 
             mock_proc.communicate = hanging_communicate
@@ -220,15 +254,16 @@ class TestSubprocessLifecycle:
         """C3 regression: aclose() must terminate in-flight subprocesses."""
         config = CmuxMCPConfig(cli_timeout_seconds=30.0)
         transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
-        with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+        with patch(
+            "asyncio.create_subprocess_exec", new_callable=AsyncMock
+        ) as mock_exec:
             mock_proc = MagicMock()
             mock_proc.pid = 99999
 
             async def hanging_communicate() -> tuple[bytes, bytes]:
-                try:
-                    await asyncio.sleep(30)
-                except asyncio.CancelledError:
-                    raise
+                # No try/except — asyncio.sleep naturally propagates
+                # CancelledError; TRY203 forbids the no-op except: raise form.
+                await asyncio.sleep(30)
                 return (b"", b"")
 
             mock_proc.communicate = hanging_communicate
