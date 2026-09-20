@@ -1,0 +1,21 @@
+# Cmux mock transport fixture format
+# Each entry matches on (method, params). `params: {}` is wildcard.
+# Per spec §"Mock mode and testing → Fixture format".
+- method: "system.ping"
+  params: {}
+  response:
+    result:
+      pong: true
+- method: "system.capabilities"
+  params: {}
+  response:
+    result:
+      capabilities: ["workspace.list", "surface.list", "pane.surfaces", "surface.split", "surface.send_text", "surface.send_key", "notification.create", "notification.list", "system.identify", "system.ping", "system.capabilities"]
+- method: "workspace.list"
+  params: {}
+  response:
+    result:
+      workspaces:
+        - id: "workspace:1"
+          title: "Mock Workspace"
+          panes: []
