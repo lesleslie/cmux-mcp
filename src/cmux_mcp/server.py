@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import atexit
 import os
+import time
 from pathlib import Path
 
 from fastmcp import FastMCP
-from mcp_common.health import register_http_health_route
 from mcp_common.server import BaseOneiricServerMixin
+from starlette.responses import JSONResponse
 
 from cmux_mcp import __version__
 from cmux_mcp.client import CmuxCliTransport, CmuxMockTransport, CmuxSocketTransport
@@ -100,12 +101,13 @@ class CmuxMCPServer(BaseOneiricServerMixin):
 
         # Register /health route with all feed components. extra_components takes
         # dicts (each feed's .snapshot() shape) per mcp-common docstring.
-        register_http_health_route(
-            self.mcp,
-            service_name="cmux-mcp",
-            version=__version__,
-            extra_components=[comp.snapshot() for comp in self._health_components.values()],
-        )
+        # Register /health route. mcp-common's register_http_health_route always
+        # returns 200 (it documents the 503 semantic as "reserved for a future
+        # /readyz endpoint"), but spec §"/health envelope wiring → HTTP status
+        # code" mandates 503 on degraded. We register a custom route that
+        # composes the same feed-snapshot body and computes the right code.
+        self._health_startup_at = time.monotonic()
+        self._register_health_route()
 
         # Wire all 12 tools onto the FastMCP instance. Per review finding C1
         # (mcp-integration-expert, live-verified): without this call, server
@@ -129,6 +131,65 @@ class CmuxMCPServer(BaseOneiricServerMixin):
 
     def get_app(self):  # type: ignore[no-untyped-def]
         return self.mcp.http_app()
+
+    def _register_health_route(self) -> None:
+        """Register a /health route that returns 200 (healthy) or 503 (degraded).
+
+        Review finding C4: mcp-common's register_http_health_route always
+        returns 200. The spec §"/health envelope wiring → HTTP status code"
+        mandates:
+        - 200 OK if all feeds healthy
+        - 503 Service Unavailable if any feed degraded OR a tool feed has
+          cycles_total == 0 && errors_total == 0 AND startup was >60s ago
+
+        We register a custom FastMCP route that owns the response shape and
+        code, leaving mcp-common's underlying health math (which feed states
+        mean "degraded") to the per-feed snapshot.
+        """
+        from starlette.requests import Request
+        config = self.config
+        components = self._health_components
+        startup_at = self._health_startup_at
+
+        @self.mcp.custom_route("/health", methods=["GET"])
+        async def health(_request: Request) -> JSONResponse:
+            now = time.monotonic()
+            startup_age = now - startup_at
+
+            components_payload: list[dict[str, object]] = []
+            any_degraded = False
+            any_tool_never_called = False
+
+            for name, comp in components.items():
+                snap = comp.snapshot()
+                cycles = int(snap.get("cycles_total", 0) or 0)
+                errors = int(snap.get("errors_total", 0) or 0)
+                # Tool feeds only: never-called past warmup → degraded.
+                if (
+                    name.startswith("tool.")
+                    and cycles == 0
+                    and errors == 0
+                    and startup_age > config.health_warmup_seconds
+                ):
+                    any_tool_never_called = True
+                # cmux_socket reports a state field; "reconnecting" or
+                # "disconnected" → degraded. We treat socket.state !=
+                # "connected" as degraded per spec §"HTTP status code".
+                if name == "cmux_socket":
+                    state = snap.get("state")
+                    if state != "connected":
+                        any_degraded = True
+                components_payload.append(snap)
+
+            degraded = any_degraded or any_tool_never_called
+            body = {
+                "status": "degraded" if degraded else "ok",
+                "service": "cmux-mcp",
+                "version": __version__,
+                "components": components_payload,
+            }
+            status_code = 503 if degraded else 200
+            return JSONResponse(body, status_code=status_code)
 
 
 __all__ = ["CmuxMCPServer"]

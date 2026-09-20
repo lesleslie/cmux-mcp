@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import warnings
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -65,31 +65,90 @@ class TestLifecycle:
 class TestHealthRegistration:
     @pytest.mark.asyncio
     async def test_startup_registers_health_route(self) -> None:
+        """After C4 fix: /health is registered via mcp.custom_route (not the
+        mcp-common register_http_health_route, which always returns 200)."""
         config = CmuxMCPConfig()
         server = CmuxMCPServer(config)
         server.socket_transport = CmuxMockTransport()
         server.cli_transport = CmuxMockTransport()
-        # Stub oneiric runtime + snapshot methods — health registration doesn't
-        # depend on them. Patches are after the mock transport injection so
-        # CmuxMCPServer.__init__ still completes (which calls _init_runtime_components).
         server.runtime.initialize = AsyncMock()  # type: ignore[method-assign]
         server._create_startup_snapshot = AsyncMock()  # type: ignore[method-assign]
-        # Patch register_http_health_route so the test doesn't actually bind a route
-        # to the FastMCP instance (which would touch internal Starlette routing).
-        with patch("cmux_mcp.server.register_http_health_route") as mock_register:
-            await server.startup()
-        # Verify the registration was attempted with the right metadata.
-        mock_register.assert_called_once()
-        kwargs = mock_register.call_args.kwargs
-        assert kwargs["service_name"] == "cmux-mcp"
-        assert "extra_components" in kwargs
-        # 2 transports + 12 tool feeds + 1 mock = 15 components.
-        assert len(kwargs["extra_components"]) == 15
+        await server.startup()
+        # mcp._additional_http_routes is a list of Starlette routes; the custom
+        # /health route from _register_health_route is appended there.
+        from starlette.routing import Route
+        health_routes = [
+            r for r in server.mcp._additional_http_routes
+            if isinstance(r, Route) and r.path == "/health"
+        ]
+        assert len(health_routes) == 1, (
+            f"expected 1 /health route, found {len(health_routes)}: "
+            f"{[r.path for r in server.mcp._additional_http_routes]}"
+        )
         # Feed components dict has the expected keys.
         assert "cmux_socket" in server._health_components
         assert "browser_cli" in server._health_components
         assert "mock_transport" in server._health_components
         assert len(server._tool_feeds) == 12
+
+    @pytest.mark.asyncio
+    async def test_health_route_returns_200_when_all_healthy(self) -> None:
+        """C4 regression: /health returns 200 when feeds are healthy and
+        tool feeds have been called (past the warm-up window)."""
+        config = CmuxMCPConfig(health_warmup_seconds=0.0)
+        server = CmuxMCPServer(config)
+        server.socket_transport = CmuxMockTransport()  # state == "connected"
+        server.cli_transport = CmuxMockTransport()
+        server.runtime.initialize = AsyncMock()  # type: ignore[method-assign]
+        server._create_startup_snapshot = AsyncMock()  # type: ignore[method-assign]
+        await server.startup()
+        # Mark every tool feed as having been exercised so the warm-up gate
+        # doesn't apply (cycles_total > 0).
+        for name, feed in server._tool_feeds.items():
+            feed.state.cycles_total = 1
+            feed.state.entities_count = 1
+
+        # Invoke the custom route's endpoint callable directly.
+        from starlette.requests import Request
+        route = next(
+            r for r in server.mcp._additional_http_routes
+            if getattr(r, "path", None) == "/health"
+        )
+        response = await route.endpoint(Request({"type": "http"}))
+        assert response.status_code == 200
+        import json
+        body = json.loads(response.body)
+        assert body["status"] == "ok"
+        assert body["service"] == "cmux-mcp"
+        assert len(body["components"]) == 15
+
+    @pytest.mark.asyncio
+    async def test_health_route_returns_503_when_socket_disconnected(self) -> None:
+        """C4 regression: /health returns 503 when cmux_socket.state != connected."""
+        config = CmuxMCPConfig(health_warmup_seconds=0.0)
+        server = CmuxMCPServer(config)
+        bad_socket = CmuxMockTransport()
+        # CmuxMockTransport.state is a read-only property. Patch the entire
+        # server lifetime so the health route sees "disconnected" — the patch
+        # is restored at the end of the with-block. Use PropertyMock for
+        # descriptor-aware replacement (the property's __get__ passes self).
+        with patch.object(type(bad_socket), "state", new_callable=PropertyMock(return_value="disconnected")):
+            server.socket_transport = bad_socket
+            server.cli_transport = CmuxMockTransport()
+            server.runtime.initialize = AsyncMock()  # type: ignore[method-assign]
+            server._create_startup_snapshot = AsyncMock()  # type: ignore[method-assign]
+            await server.startup()
+
+            from starlette.requests import Request
+            route = next(
+                r for r in server.mcp._additional_http_routes
+                if getattr(r, "path", None) == "/health"
+            )
+            response = await route.endpoint(Request({"type": "http"}))
+            assert response.status_code == 503
+            import json
+            body = json.loads(response.body)
+            assert body["status"] == "degraded"
 
     @pytest.mark.asyncio
     async def test_startup_registers_all_12_tools(self) -> None:
@@ -101,8 +160,7 @@ class TestHealthRegistration:
         server.cli_transport = CmuxMockTransport()
         server.runtime.initialize = AsyncMock()  # type: ignore[method-assign]
         server._create_startup_snapshot = AsyncMock()  # type: ignore[method-assign]
-        with patch("cmux_mcp.server.register_http_health_route"):
-            await server.startup()
+        await server.startup()
         # Live verification: the FastMCP instance exposes all 12 cmux tools.
         tools = list(await server.mcp.list_tools())
         assert len(tools) == 12, (
