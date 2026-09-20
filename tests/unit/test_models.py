@@ -12,6 +12,23 @@ from cmux_mcp.models import (
     SurfaceKind,
     SURFACE_ID_PATTERN,
     Workspace,
+    # Browser models
+    BrowserConsoleResult,
+    BrowserError,
+    BrowserSnapshot,
+    BrowserTab,
+    ConsoleLevel,
+    ConsoleMessage,
+    # Tool inputs
+    BrowserClickInput,
+    BrowserConsoleInput,
+    BrowserEvaluateInput,
+    BrowserNavigateInput,
+    BrowserSnapshotInput,
+    BrowserTabsInput,
+    BrowserTypeInput,
+    NotifyInput,
+    SendKeysInput,
 )
 
 
@@ -78,3 +95,104 @@ class TestNotification:
             "2026-09-16T12:34:56Z",
             "2026-09-16T12:34:56+00:00",
         )
+
+
+@pytest.mark.unit
+class TestBrowserModels:
+    def test_browser_snapshot_round_trip(self) -> None:
+        snap = BrowserSnapshot(snapshot="[ref=e1] button Sign in", captured_at="2026-09-16T12:34:56Z")
+        assert "Sign in" in snap.snapshot
+
+    def test_console_level_strenum(self) -> None:
+        assert ConsoleLevel.LOG == "log"
+        assert ConsoleLevel.ERROR == "error"
+        assert ConsoleLevel.WARN == "warn"
+        assert ConsoleLevel.INFO == "info"
+        assert ConsoleLevel.DEBUG == "debug"
+
+    def test_console_message_optional_source(self) -> None:
+        msg = ConsoleMessage(level=ConsoleLevel.LOG, text="hello", timestamp="2026-09-16T12:34:56Z")
+        assert msg.source is None
+
+    def test_browser_tab_url_https_only(self) -> None:
+        tab = BrowserTab(id="t1", url="https://example.com", title="Example", active=True)
+        assert str(tab.url) == "https://example.com/"
+
+    def test_browser_tab_url_rejects_javascript(self) -> None:
+        with pytest.raises(ValidationError):
+            BrowserTab(id="t1", url="javascript:alert(1)", title="x", active=False)
+
+    def test_browser_error_stack_optional(self) -> None:
+        err = BrowserError(message="undefined is not a function")
+        assert err.stack is None
+
+    def test_browser_console_result_partial_failure_flags(self) -> None:
+        result = BrowserConsoleResult(
+            messages=[], errors=[], partial_failure=True, failed_subcalls=["errors_list"]
+        )
+        assert result.partial_failure is True
+        assert result.failed_subcalls == ["errors_list"]
+
+
+@pytest.mark.unit
+class TestSendKeysInput:
+    def test_text_only_accepted(self) -> None:
+        inp = SendKeysInput(surface_id="surface:abc", text="hello world")
+        assert inp.text == "hello world"
+        assert inp.key is None
+
+    def test_key_only_accepted(self) -> None:
+        inp = SendKeysInput(surface_id="surface:abc", key="enter")
+        assert inp.key == "enter"
+        assert inp.text is None
+
+    def test_both_text_and_key_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            SendKeysInput(surface_id="surface:abc", text="x", key="enter")
+
+    def test_neither_text_nor_key_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            SendKeysInput(surface_id="surface:abc")
+
+    def test_key_literal_enum_validates_known_only(self) -> None:
+        with pytest.raises(ValidationError):
+            SendKeysInput(surface_id="surface:abc", key="Eneter")  # typo
+
+
+@pytest.mark.unit
+class TestBrowserNavigateInput:
+    def test_https_url_accepted(self) -> None:
+        inp = BrowserNavigateInput(surface_id="surface:abc", url="https://example.com")
+        assert str(inp.url) == "https://example.com/"
+
+    def test_javascript_url_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            BrowserNavigateInput(surface_id="surface:abc", url="javascript:alert(1)")
+
+    def test_file_url_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            BrowserNavigateInput(surface_id="surface:abc", url="file:///etc/passwd")
+
+
+@pytest.mark.unit
+class TestBrowserEvaluateInput:
+    def test_expression_length_bounds(self) -> None:
+        with pytest.raises(ValidationError):
+            BrowserEvaluateInput(surface_id="surface:abc", expression="")
+        with pytest.raises(ValidationError):
+            BrowserEvaluateInput(surface_id="surface:abc", expression="x" * 10_241)
+
+
+@pytest.mark.unit
+class TestBrowserConsoleInput:
+    def test_limit_bounds(self) -> None:
+        with pytest.raises(ValidationError):
+            BrowserConsoleInput(surface_id="surface:abc", limit=0)
+        with pytest.raises(ValidationError):
+            BrowserConsoleInput(surface_id="surface:abc", limit=1_001)
+
+    def test_default_limit_is_50(self) -> None:
+        inp = BrowserConsoleInput(surface_id="surface:abc")
+        assert inp.limit == 50
+        assert inp.level == ConsoleLevel.LOG
+        assert inp.since is None
