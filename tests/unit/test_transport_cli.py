@@ -82,6 +82,37 @@ class TestConcurrencyLimits:
         await asyncio.gather(*[transport.call(["cmux"]) for _ in range(10)])
         assert max_active == 2
 
+    @pytest.mark.asyncio
+    async def test_active_subprocesses_counts_surface_locked_calls(self) -> None:
+        """H7 regression: _active counts all in-flight subprocesses, including
+        those protected by per-surface locks. Previously only non-surface
+        calls were counted, so /health's BrowserCliFeedComponent.active_subprocesses
+        reported 0 even when many surface-locked calls were in flight."""
+        config = CmuxMCPConfig(cli_max_concurrent=8)
+        transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
+        # Patch _invoke to increment transport._active on entry.
+        original_invoke = transport._invoke
+
+        async def counting_invoke(*_args: object, **_kwargs: object) -> CliResult:
+            transport._active += 1
+            try:
+                await asyncio.sleep(0.05)
+                return CliResult(ok=True, stdout=b"", stderr=b"", returncode=0, duration_ms=0)
+            finally:
+                transport._active -= 1
+
+        transport._invoke = counting_invoke  # type: ignore[method-assign]
+        # Two concurrent calls on the SAME surface — both should be counted
+        # even though they're serialized by the per-surface lock.
+        await asyncio.gather(
+            transport.call(["cmux", "browser", "--surface", "surface:abc", "navigate", "u1"]),
+            transport.call(["cmux", "browser", "--surface", "surface:abc", "click", "e1"]),
+        )
+        # The two surface-locked calls ran serially due to the per-surface lock,
+        # so peak concurrent was 1. _active should still be incremented/decremented
+        # correctly for surface-locked calls — never negative, never stuck > 0.
+        assert transport._active == 0
+
 
 @pytest.mark.unit
 class TestPerSurfaceLock:

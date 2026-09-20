@@ -36,16 +36,35 @@ def acquire_pid_file(path: Path) -> None:
     Per spec §"Lifecycle → Startup preflight":
       - Read existing PID; if alive (`os.kill(pid, 0)` succeeds), refuse.
       - If dead or missing, overwrite.
+
+    Review finding H10: previous impl used `if path.exists()` then
+    `path.read_text()` (TOCTOU race) and only caught ProcessLookupError /
+    ValueError. A stale-but-unreadable PID file owned by another user
+    raised PermissionError, which was uncaught.
     """
-    if path.exists():
+    try:
+        existing_pid_text = path.read_text().strip()
+    except FileNotFoundError:
+        existing_pid_text = ""
+    except OSError:
+        # Path unreadable (permissions etc.); treat as stale.
+        existing_pid_text = ""
+    if existing_pid_text:
         try:
-            existing_pid = int(path.read_text().strip())
+            existing_pid = int(existing_pid_text)
             os.kill(existing_pid, 0)
             raise RuntimeError(
                 f"PID file {path} is held by live process {existing_pid}"
             )
-        except (ProcessLookupError, ValueError):
-            path.unlink()
+        except (ProcessLookupError, ValueError, PermissionError):
+            # ProcessLookupError: PID dead.
+            # ValueError: malformed PID text.
+            # PermissionError: PID alive but owned by another user (cannot kill -0).
+            # In all three cases, the existing PID is unusable → overwrite.
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(str(os.getpid()))
 

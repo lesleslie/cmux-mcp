@@ -241,7 +241,10 @@ class CmuxSocketTransport:
                         )
                     else:
                         fut.set_result(payload.get("result", {}))
-        except (EOFError, asyncio.IncompleteReadError):
+        except (EOFError, asyncio.IncompleteReadError, json.JSONDecodeError):
+            # Review finding H9: a single corrupt JSON frame from cmux would
+            # kill the reader task. EOF + IncompleteReadError + JSONDecodeError
+            # all funnel into the same recovery path: reconnect with backoff.
             self._state = "reconnecting"
             await self._reconnect_with_backoff()
 
@@ -373,13 +376,16 @@ class CmuxCliTransport:
     ) -> CliResult:
         full_args = [str(self._binary_path), *args]
         surface_id = self._extract_surface_id(args)
+        # Review finding H7: _active was incremented only on the non-surface path.
+        # Move the counter outside the surface_id branch so all in-flight
+        # subprocesses (surface-locked or not) feed BrowserCliFeedComponent.active_subprocesses.
         async with self._global_sem:
-            if surface_id:
-                lock = await self._surface_lock_for(surface_id)
-                async with lock:
-                    return await self._invoke(full_args, timeout)
             self._active += 1
             try:
+                if surface_id:
+                    lock = await self._surface_lock_for(surface_id)
+                    async with lock:
+                        return await self._invoke(full_args, timeout)
                 return await self._invoke(full_args, timeout)
             finally:
                 self._active -= 1

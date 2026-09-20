@@ -198,6 +198,30 @@ class TestPidManagement:
         acquire_pid_file(path)  # should overwrite stale
         assert int(path.read_text().strip()) > 0
 
+    def test_acquire_handles_permission_error_on_unreadable_pid_file(self, tmp_path: Path) -> None:
+        """H10 regression: stale-but-unreadable PID files (e.g. owned by another
+        user) raise PermissionError on os.kill(pid, 0). The fix treats all
+        OSError variants as 'stale' so we overwrite rather than crash."""
+        path = tmp_path / "test.pid"
+        # Force os.kill to raise PermissionError for any pid, simulating
+        # 'PID alive but foreign-user-owned'.
+        with patch("os.kill", side_effect=PermissionError("foreign pid")):
+            path.write_text("12345")  # some pid; kill will raise PermissionError
+            # Should NOT raise — the PermissionError path treats it as stale.
+            acquire_pid_file(path)
+        assert int(path.read_text().strip()) > 0
+
+    def test_acquire_handles_toctou_race(self, tmp_path: Path) -> None:
+        """H10 regression: previous impl used path.exists() then path.read_text()
+        with no atomic guard. A concurrent delete between exists() and read_text()
+        raised FileNotFoundError. The fix uses try/read_text() instead."""
+        path = tmp_path / "test.pid"
+        # Simulate FileNotFoundError on read_text (file removed concurrently).
+        with patch.object(Path, "read_text", side_effect=FileNotFoundError):
+            acquire_pid_file(path)  # should treat as "no existing pid"
+        # acquire_pid_file will create its own pid file:
+        assert path.exists()
+
     def test_release_removes_file(self, tmp_path: Path) -> None:
         path = tmp_path / "test.pid"
         acquire_pid_file(path)
