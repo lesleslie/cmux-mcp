@@ -37,6 +37,11 @@ class CmuxMCPConfig(BaseSettings):
         env_prefix="CMUX_MCP_",
         env_file=".env",
         extra="allow",
+        # Without this, validation_alias="CMUX_MCP_MOCK" disables field-name
+        # input — `CmuxMCPConfig(mock_mode=True)` would silently set mock_mode
+        # to the platform default (False on macOS) instead of True. Tests and
+        # programmatic callers rely on `mock_mode=True` working.
+        populate_by_name=True,
     )
 
     host: str = "127.0.0.1"

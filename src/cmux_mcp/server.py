@@ -8,6 +8,10 @@ Per spec §"Server class":
 """
 from __future__ import annotations
 
+import atexit
+import os
+from pathlib import Path
+
 from fastmcp import FastMCP
 from mcp_common.health import register_http_health_route
 from mcp_common.server import BaseOneiricServerMixin
@@ -21,6 +25,35 @@ from cmux_mcp.health import (
     SocketFeedComponent,
     build_tool_feed_components,
 )
+from cmux_mcp.logging_setup import maybe_warn_mock_mode
+
+
+def acquire_pid_file(path: Path) -> None:
+    """Acquire a PID file with stale-detection. Refuses if PID is alive.
+
+    Per spec §"Lifecycle → Startup preflight":
+      - Read existing PID; if alive (`os.kill(pid, 0)` succeeds), refuse.
+      - If dead or missing, overwrite.
+    """
+    if path.exists():
+        try:
+            existing_pid = int(path.read_text().strip())
+            os.kill(existing_pid, 0)
+            raise RuntimeError(
+                f"PID file {path} is held by live process {existing_pid}"
+            )
+        except (ProcessLookupError, ValueError):
+            path.unlink()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(os.getpid()))
+
+
+def release_pid_file(path: Path) -> None:
+    """Release PID file. Idempotent."""
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
 
 
 class CmuxMCPServer(BaseOneiricServerMixin):
@@ -35,6 +68,8 @@ class CmuxMCPServer(BaseOneiricServerMixin):
         self.runtime = self._init_runtime_components("cmux-mcp")
         self.socket_transport: CmuxSocketTransport | CmuxMockTransport | None = None
         self.cli_transport: CmuxCliTransport | CmuxMockTransport | None = None
+        # Best-effort PID release on any exit path (per plan §"Stale PID file recovery").
+        atexit.register(release_pid_file, config.pid_file_path)
 
     async def startup(self) -> None:
         """Initialize runtime + transports, build feed components, register /health.
@@ -42,6 +77,7 @@ class CmuxMCPServer(BaseOneiricServerMixin):
         Tool registration is added in Task 17.
         """
         await self.runtime.initialize()
+        maybe_warn_mock_mode(self.config)
         if self.config.mock_mode:
             self.socket_transport = CmuxMockTransport()
             self.cli_transport = CmuxMockTransport()

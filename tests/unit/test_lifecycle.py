@@ -1,6 +1,7 @@
 """Tests for CmuxMCPServer — lifecycle mixin wiring."""
 from __future__ import annotations
 
+import os
 import warnings
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,7 +10,7 @@ import pytest
 
 from cmux_mcp.client import CmuxMockTransport
 from cmux_mcp.config import CmuxMCPConfig
-from cmux_mcp.server import CmuxMCPServer
+from cmux_mcp.server import CmuxMCPServer, acquire_pid_file, release_pid_file
 
 # Python 3.14 + AsyncMock __init__ quirk — suppress at module level (upstream).
 pytestmark = pytest.mark.filterwarnings("ignore::RuntimeWarning")
@@ -89,3 +90,30 @@ class TestHealthRegistration:
         assert "browser_cli" in server._health_components
         assert "mock_transport" in server._health_components
         assert len(server._tool_feeds) == 12
+
+
+@pytest.mark.unit
+class TestPidManagement:
+    def test_acquire_creates_pid_file(self, tmp_path: Path) -> None:
+        path = tmp_path / "test.pid"
+        acquire_pid_file(path)
+        assert path.exists()
+        assert int(path.read_text().strip()) > 0
+
+    def test_acquire_existing_alive_pid_refuses(self, tmp_path: Path) -> None:
+        path = tmp_path / "test.pid"
+        path.write_text(str(os.getpid()))  # current process is alive
+        with pytest.raises(RuntimeError):
+            acquire_pid_file(path)
+
+    def test_acquire_stale_pid_recovers(self, tmp_path: Path) -> None:
+        path = tmp_path / "test.pid"
+        path.write_text("99999999")  # unlikely to be alive
+        acquire_pid_file(path)  # should overwrite stale
+        assert int(path.read_text().strip()) > 0
+
+    def test_release_removes_file(self, tmp_path: Path) -> None:
+        path = tmp_path / "test.pid"
+        acquire_pid_file(path)
+        release_pid_file(path)
+        assert not path.exists()
