@@ -52,3 +52,29 @@ class TestLifecycle:
 
         mock_socket.aclose.assert_awaited_once()
         mock_cli.aclose.assert_awaited_once()
+
+
+@pytest.mark.unit
+class TestHealthRegistration:
+    @pytest.mark.asyncio
+    async def test_startup_registers_health_route(self) -> None:
+        config = CmuxMCPConfig()
+        server = CmuxMCPServer(config)
+        server.socket_transport = CmuxMockTransport()
+        server.cli_transport = CmuxMockTransport()
+        # Patch register_http_health_route so the test doesn't actually bind a route
+        # to the FastMCP instance (which would touch internal Starlette routing).
+        with patch("cmux_mcp.server.register_http_health_route") as mock_register:
+            await server.startup()
+        # Verify the registration was attempted with the right metadata.
+        mock_register.assert_called_once()
+        kwargs = mock_register.call_args.kwargs
+        assert kwargs["service_name"] == "cmux-mcp"
+        assert "extra_components" in kwargs
+        # 2 transports + 12 tool feeds + 1 mock = 15 components.
+        assert len(kwargs["extra_components"]) == 15
+        # Feed components dict has the expected keys.
+        assert "cmux_socket" in server._health_components
+        assert "browser_cli" in server._health_components
+        assert "mock_transport" in server._health_components
+        assert len(server._tool_feeds) == 12
