@@ -44,6 +44,9 @@ class TestSubprocessInvocation:
             mock_proc.communicate = hanging_communicate
             mock_proc.send_signal = MagicMock()
             mock_proc.wait = AsyncMock()
+            # After C2 fix: _invoke's finally-block checks proc.returncode to decide
+            # whether to kill. Simulate "still running" by setting it to None.
+            mock_proc.returncode = None
             mock_exec.return_value = mock_proc
             with pytest.raises(Exception):  # CmuxTimeoutError
                 await transport.call(["cmux", "--slow-op"])
@@ -134,3 +137,89 @@ class TestPerSurfaceLock:
         assert starts == 2 and ends_before_any_start == 0, (
             f"Expected parallel execution; got {order}"
         )
+
+
+@pytest.mark.unit
+class TestSubprocessLifecycle:
+    """Regression tests for review findings C2 (subprocess leak on cancellation)
+    and C3 (aclose() no-op)."""
+
+    @pytest.mark.asyncio
+    async def test_cancellation_kills_subprocess(self) -> None:
+        """C2 regression: cancelling the awaiting task must kill the subprocess.
+
+        Without the finally-block in _invoke, CancelledError propagates and
+        the child cmux process is orphaned (Python 3.14 does NOT auto-kill
+        subprocesses when the awaiting coroutine is cancelled).
+        """
+        config = CmuxMCPConfig(cli_timeout_seconds=30.0)
+        transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
+        with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+            mock_proc = MagicMock()
+            mock_proc.pid = 12345
+
+            async def hanging_communicate() -> tuple[bytes, bytes]:
+                try:
+                    await asyncio.sleep(30)
+                except asyncio.CancelledError:
+                    raise
+                return (b"", b"")
+
+            mock_proc.communicate = hanging_communicate
+            mock_proc.send_signal = MagicMock()
+            mock_proc.wait = AsyncMock()
+            mock_proc.returncode = None  # still running at cancellation time
+
+            mock_exec.return_value = mock_proc
+
+            async def run_call():
+                await transport.call(["cmux", "--slow-op"])
+
+            task = asyncio.create_task(run_call())
+            await asyncio.sleep(0.05)  # let _invoke reach the await
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+        # _invoke's finally-block ran: SIGTERM (or SIGKILL after grace).
+        assert mock_proc.send_signal.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_aclose_kills_active_subprocesses(self) -> None:
+        """C3 regression: aclose() must terminate in-flight subprocesses."""
+        config = CmuxMCPConfig(cli_timeout_seconds=30.0)
+        transport = CmuxCliTransport(config, binary_path="/usr/bin/cmux")
+        with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+            mock_proc = MagicMock()
+            mock_proc.pid = 99999
+
+            async def hanging_communicate() -> tuple[bytes, bytes]:
+                try:
+                    await asyncio.sleep(30)
+                except asyncio.CancelledError:
+                    raise
+                return (b"", b"")
+
+            mock_proc.communicate = hanging_communicate
+            mock_proc.send_signal = MagicMock()
+            mock_proc.wait = AsyncMock()
+            mock_proc.returncode = None
+
+            mock_exec.return_value = mock_proc
+
+            # Fire a call in the background, don't await it.
+            async def run_call():
+                await transport.call(["cmux", "--slow-op"])
+
+            task = asyncio.create_task(run_call())
+            await asyncio.sleep(0.05)  # let _invoke reach the await
+
+            # aclose() must terminate the still-running subprocess.
+            await transport.aclose()
+            assert mock_proc.send_signal.call_count >= 1
+
+            # Cancel the orphaned task (it's been killed but its CancelledError
+            # hasn't been awaited).
+            task.cancel()
+            with pytest.raises((asyncio.CancelledError, Exception)):
+                await task

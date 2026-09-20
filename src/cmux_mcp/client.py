@@ -360,6 +360,8 @@ class CmuxCliTransport:
         self._global_sem = asyncio.Semaphore(config.cli_max_concurrent)
         self._surface_locks: dict[str, asyncio.Lock] = {}
         self._active = 0
+        self._active_subprocesses: dict[int, asyncio.subprocess.Process] = {}
+        self._subprocess_lock = asyncio.Lock()
         self._lock_lock = asyncio.Lock()
         self._env = _filtered_env()
 
@@ -404,6 +406,8 @@ class CmuxCliTransport:
             stderr=asyncio.subprocess.PIPE,
             env=self._env,
         )
+        async with self._subprocess_lock:
+            self._active_subprocesses[proc.pid] = proc
         start = time.monotonic()
         try:
             stdout, stderr = await asyncio.wait_for(
@@ -411,13 +415,12 @@ class CmuxCliTransport:
                 timeout=timeout or self._config.cli_timeout_seconds,
             )
         except asyncio.TimeoutError as exc:
-            proc.send_signal(_signal.SIGTERM)
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=1.0)
-            except asyncio.TimeoutError:
-                proc.send_signal(_signal.SIGKILL)
-                await proc.wait()
             raise CmuxTimeoutError(f"cmux CLI timeout: args={full_args!r}") from exc
+        finally:
+            if proc.returncode is None:
+                await self._kill_subprocess(proc)
+            async with self._subprocess_lock:
+                self._active_subprocesses.pop(proc.pid, None)
         return CliResult(
             ok=proc.returncode == 0,
             stdout=stdout,
@@ -426,8 +429,23 @@ class CmuxCliTransport:
             duration_ms=int((time.monotonic() - start) * 1000),
         )
 
+    async def _kill_subprocess(self, proc: asyncio.subprocess.Process) -> None:
+        if proc.returncode is not None:
+            return
+        proc.send_signal(_signal.SIGTERM)
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=1.0)
+        except asyncio.TimeoutError:
+            proc.send_signal(_signal.SIGKILL)
+            await proc.wait()
+
     async def aclose(self) -> None:
-        return None
+        async with self._subprocess_lock:
+            procs = list(self._active_subprocesses.values())
+        for proc in procs:
+            await self._kill_subprocess(proc)
+        async with self._subprocess_lock:
+            self._active_subprocesses.clear()
 
     @property
     def active_subprocesses(self) -> int:
