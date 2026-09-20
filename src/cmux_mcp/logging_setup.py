@@ -7,9 +7,9 @@ Per spec §"Logging":
 """
 from __future__ import annotations
 
-import logging
+from oneiric.core.logging import get_logger
 
-_LOG = logging.getLogger("cmux_mcp.logging_setup")
+_LOG = get_logger("cmux_mcp.logging_setup")
 
 
 def maybe_warn_mock_mode(config: object) -> None:
