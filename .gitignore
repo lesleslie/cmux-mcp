@@ -49,6 +49,10 @@ coverage.json
 
 # Crackerjack
 .crackerjack/
+# Crackerjack tool output caches
+.cache/
+# lychee link checker persistent cache (single file at repo root)
+.lycheecache
 
 # IDE
 .idea/
