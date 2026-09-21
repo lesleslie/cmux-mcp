@@ -20,8 +20,6 @@ Built with:
 - **Python 3.14+**: modern type syntax (`X | None`, `list[str]`,
   `pathlib.Path`)
 
-Part of the [Bodai Ecosystem](https://github.com/lesleslie/bodai).
-
 ## Architecture
 
 ### Core Components
@@ -269,7 +267,7 @@ To contribute to cmux-mcp:
 1. Make your changes.
 1. Run tests: `uv run pytest`.
 1. Run quality gate: `uv run crackerjack run`.
-1. Submit changes (pre-1.0 Bodai merge policy: merge directly to `main`).
+1. Submit changes (pre-1.0 merge policy: merge directly to `main`).
 1. **Do not** push without explicit approval.
 
 ## Security

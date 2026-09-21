@@ -58,7 +58,7 @@ uv run crackerjack run       # full quality gate (17 fast + 11 comprehensive hoo
 - Markers: `unit`, `integration`, `e2e`. Skip `-m "not slow"` for fast
   feedback.
 - New MCP tool → must add `tests/integration/test_<tool>_e2e.py`
-  (Bodai wiring discipline).
+  (MCP wiring discipline).
 
 ## Commit Conventions
 

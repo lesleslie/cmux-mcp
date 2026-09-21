@@ -9,9 +9,7 @@ For a shorter, tool-neutral bootstrap, start with `AGENTS.md`.
 [cmux](https://github.com/manaflow-ai/cmux) instance (macOS-only, Ghostty-based
 terminal for AI coding agents) as 12 MCP tools over Streamable HTTP. It speaks
 cmux's Unix-socket JSON-RPC protocol directly for orchestration/notification
-tools, and shells out to the cmux CLI for browser-automation tools.
-
-Part of the [Bodai Ecosystem](https://github.com/lesleslie/bodai). The
+tools, and shells out to the cmux CLI for browser-automation tools. The
 **`cmux-mcp`** component owns port **3061** (see `cmux_mcp/__init__.py`
 `DEFAULT_PORT`).
 
@@ -98,7 +96,7 @@ project-level conventions:
 
 ## MCP Backend Wiring Discipline
 
-Bodai-wide rule (canonical source: `mahavishnu/.claude/decisions/mcp-backend-wiring-discipline.md`):
+Cross-repo rule (canonical source: `mahavishnu/.claude/decisions/mcp-backend-wiring-discipline.md`):
 
 - `/health` returns 503 on degraded; `feed.entities_count`,
   `feed.last_updated_timestamp`, `feed.errors_total`, `feed.cycles_total`
@@ -141,5 +139,14 @@ Bodai-wide rule (canonical source: `mahavishnu/.claude/decisions/mcp-backend-wir
 - **Push policy**: `git push` requires explicit user approval. Add the
   remote once; never push without confirmation.
 - **Git author**: `les@wedgwoodwebworks.com` (NOT `.local`).
-- **Bodai merge policy** (pre-1.0): all changes merge directly to `main`;
-  no PRs.
+- **Pre-1.0 merge policy**: all changes merge directly to `main`; no PRs.
+
+## Bodai integration
+
+When installed alongside the [Bodai ecosystem](https://github.com/lesleslie/bodai),
+cmux-mcp follows the shared cross-repo conventions: Crackerjack for CI/CD
+quality gates, the four mcp-common baseline tools (`discover_tools`,
+`get_liveness`, `get_readiness`, `health_check_all`), and the MCP wiring
+discipline documented in `mahavishnu/.claude/decisions/mcp-backend-wiring-discipline.md`.
+No Bodai-specific code is imported at runtime — integration is purely via
+shared conventions.
