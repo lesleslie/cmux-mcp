@@ -96,7 +96,7 @@ project-level conventions:
 
 ## MCP Backend Wiring Discipline
 
-Cross-repo rule (canonical source: `mahavishnu/.claude/decisions/mcp-backend-wiring-discipline.md`):
+Cross-repo rule:
 
 - `/health` returns 503 on degraded; `feed.entities_count`,
   `feed.last_updated_timestamp`, `feed.errors_total`, `feed.cycles_total`
@@ -141,12 +141,6 @@ Cross-repo rule (canonical source: `mahavishnu/.claude/decisions/mcp-backend-wir
 - **Git author**: `les@wedgwoodwebworks.com` (NOT `.local`).
 - **Pre-1.0 merge policy**: all changes merge directly to `main`; no PRs.
 
-## Bodai integration
-
-When installed alongside the [Bodai ecosystem](https://github.com/lesleslie/bodai),
-cmux-mcp follows the shared cross-repo conventions: Crackerjack for CI/CD
-quality gates, the four mcp-common baseline tools (`discover_tools`,
-`get_liveness`, `get_readiness`, `health_check_all`), and the MCP wiring
-discipline documented in `mahavishnu/.claude/decisions/mcp-backend-wiring-discipline.md`.
-No Bodai-specific code is imported at runtime — integration is purely via
-shared conventions.
+Built on [Oneiric](https://github.com/lesleslie/oneiric) for runtime configuration
+and [mcp-common](https://github.com/lesleslie/mcp-common) for the FastMCP
+baseline. [Crackerjack](https://github.com/lesleslie/crackerjack) gates every commit.

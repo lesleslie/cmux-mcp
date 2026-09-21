@@ -78,3 +78,7 @@ uv run crackerjack run       # full quality gate (17 fast + 11 comprehensive hoo
   new log statements that touch user input.
 - macOS-only real mode; mock mode (`CMUX_MCP_MOCK=1`) is the
   cross-platform fallback.
+
+Built on [Oneiric](https://github.com/lesleslie/oneiric) for runtime configuration
+and [mcp-common](https://github.com/lesleslie/mcp-common) for the FastMCP
+baseline. [Crackerjack](https://github.com/lesleslie/crackerjack) gates every commit.

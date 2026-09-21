@@ -275,8 +275,7 @@ To contribute to cmux-mcp:
 - Loopback bind by default; non-loopback requires
   `CMUX_MCP_AUTH_ENABLED=true` (validator in `config.py`).
 - Subprocess env filtered to `SUBPROCESS_ENV_ALLOWLIST` in
-  `cmux_mcp/client.py` (excludes `MINIMAX_API_KEY`,
-  `MAHAVISHNU_AUTH_SECRET`, etc.).
+  `cmux_mcp/client.py` (excludes `MINIMAX_API_KEY`, etc.).
 - Pydantic validation on every tool input (`BrowserNavigateInput`,
   `SendKeysInput`, `NotifyInput`, etc.) — surface IDs match
   `SURFACE_ID_PATTERN`, expression length bounded.
@@ -284,17 +283,6 @@ To contribute to cmux-mcp:
 - No external API keys shipped in the repo; settings under
   `settings/local.yaml` are gitignored.
 
-## Bodai integration
-
-cmux-mcp is the **cmux terminal automation** component. It sits beside:
-
-- **Mahavishnu** (port 8680) — orchestrator; routes work to cmux-mcp.
-- **Akosha** (port 8682) — Seer (intelligence, embeddings).
-- **Session-Buddy** (port 8678) — Builder (memory).
-- **Crackerjack** (port 8676) — Inspector (quality).
-- **Bodai Crow** (port 8693) — browser automation bridge.
-- **web_reader** (port 8699) — webpage ingestion.
-
-When Mahavishnu routes a task that needs terminal automation, it
-delegates to cmux-mcp via MCP. cmux-mcp returns structured results; the
-audit trail lives in Akosha's OTel store.
+Built on [Oneiric](https://github.com/lesleslie/oneiric) for runtime configuration
+and [mcp-common](https://github.com/lesleslie/mcp-common) for the FastMCP
+baseline. [Crackerjack](https://github.com/lesleslie/crackerjack) gates every commit.

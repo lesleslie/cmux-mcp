@@ -101,3 +101,7 @@ uv run pytest -m unit         # Unit tests only
 uv run pytest -m integration  # Integration tests (require live cmux)
 uv run crackerjack run        # Full quality gate
 ```
+
+Built on [Oneiric](https://github.com/lesleslie/oneiric) for runtime configuration
+and [mcp-common](https://github.com/lesleslie/mcp-common) for the FastMCP
+baseline. [Crackerjack](https://github.com/lesleslie/crackerjack) gates every commit.
