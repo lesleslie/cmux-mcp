@@ -284,7 +284,7 @@ To contribute to cmux-mcp:
 - No external API keys shipped in the repo; settings under
   `settings/local.yaml` are gitignored.
 
-## Bodai Ecosystem Position
+## Bodai integration
 
 cmux-mcp is the **cmux terminal automation** component. It sits beside:
 
