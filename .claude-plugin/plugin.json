@@ -1,0 +1,17 @@
+{
+  "author": {
+    "name": "Wedgwood Web Works"
+  },
+  "description": "Plugin for the cmux-mcp terminal automation server (programmatic control of a running cmux instance on macOS).",
+  "keywords": [
+    "mcp",
+    "cmux",
+    "terminal",
+    "automation",
+    "ghostty"
+  ],
+  "mcpServers": "./.mcp.json",
+  "name": "cmux",
+  "schema_version": "1.0.0",
+  "version": "0.2.0"
+}

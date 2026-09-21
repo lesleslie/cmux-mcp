@@ -1,0 +1,6 @@
+{
+  "cmux": {
+    "type": "http",
+    "url": "http://localhost:3061/mcp"
+  }
+}
