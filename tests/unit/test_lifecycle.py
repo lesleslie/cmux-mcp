@@ -125,7 +125,7 @@ class TestHealthRegistration:
         import json
 
         body = json.loads(response.body)
-        assert body["status"] == "ok"
+        assert body["status"] == "healthy"
         assert body["service"] == "cmux-mcp"
         assert len(body["components"]) == 15
 
