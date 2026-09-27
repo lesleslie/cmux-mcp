@@ -12,7 +12,9 @@ from __future__ import annotations
 import atexit
 import os
 import time
+from contextlib import suppress
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 from fastmcp import FastMCP
 from mcp_common.server import BaseOneiricServerMixin
@@ -29,6 +31,9 @@ from cmux_mcp.health import (
     build_tool_feed_components,
 )
 from cmux_mcp.logging_setup import maybe_warn_mock_mode
+
+if TYPE_CHECKING:
+    from cmux_mcp.health import _Feed
 
 
 def acquire_pid_file(path: Path) -> None:
@@ -57,28 +62,31 @@ def acquire_pid_file(path: Path) -> None:
             raise RuntimeError(
                 f"PID file {path} is held by live process {existing_pid}"
             )
-        except ProcessLookupError, ValueError, PermissionError:
+        except (ProcessLookupError, ValueError, PermissionError):
             # ProcessLookupError: PID dead.
             # ValueError: malformed PID text.
             # PermissionError: PID alive but owned by another user (cannot kill -0).
             # In all three cases, the existing PID is unusable → overwrite.
-            try:
+            with suppress(FileNotFoundError):
                 path.unlink()
-            except FileNotFoundError:
-                pass
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(str(os.getpid()))
 
 
 def release_pid_file(path: Path) -> None:
     """Release PID file. Idempotent."""
-    try:
+    with suppress(FileNotFoundError):
         path.unlink()
-    except FileNotFoundError:
-        pass
 
 
 class CmuxMCPServer(BaseOneiricServerMixin):
+    # Narrow config to CmuxMCPConfig — BaseOneiricServerMixin declares
+    # `config: MCPBaseSettings | MCPServerSettings`, but cmux-mcp uses its
+    # own CmuxMCPConfig (extends pydantic_settings.BaseSettings directly,
+    # not MCPBaseSettings). Pre-1.0: replace not extend — narrow at the
+    # subclass instead of wrapping.
+    config: CmuxMCPConfig
+
     def __init__(self, config: CmuxMCPConfig) -> None:
         self.config = config
         self.mcp = FastMCP(name="cmux-mcp", version=__version__)
@@ -113,12 +121,18 @@ class CmuxMCPServer(BaseOneiricServerMixin):
         # Build feed components for /health (per spec §"/health wiring").
         self._tool_feeds = {comp.name: comp for comp in build_tool_feed_components()}
         self._mock_transport_feed = MockTransportComponent()
-        self._health_components: dict[str, object] = {
-            "cmux_socket": SocketFeedComponent(self.socket_transport),
-            "browser_cli": BrowserCliFeedComponent(self.cli_transport),
+        # CmuxMockTransport implements both transport Protocol shapes
+        # structurally (state / active_subprocesses attributes), so the
+        # union types narrow to the concrete type at runtime via cast().
+        self._health_components: dict[str, _Feed] = {
+            "cmux_socket": SocketFeedComponent(
+                cast(CmuxSocketTransport, self.socket_transport)
+            ),
+            "browser_cli": BrowserCliFeedComponent(
+                cast(CmuxCliTransport, self.cli_transport)
+            ),
             "mock_transport": self._mock_transport_feed,
-            **self._tool_feeds,
-        }
+        } | self._tool_feeds
 
         # Register /health route with all feed components. extra_components takes
         # dicts (each feed's .snapshot() shape) per mcp-common docstring.
@@ -190,13 +204,14 @@ class CmuxMCPServer(BaseOneiricServerMixin):
 
             for name, comp in components.items():
                 snap = comp.snapshot()
-                cycles = int(snap.get("cycles_total", 0) or 0)
-                errors = int(snap.get("errors_total", 0) or 0)
+                cycles_raw = snap.get("cycles_total", 0)
+                cycles = int(cycles_raw) if cycles_raw else 0
+                errors_raw = snap.get("errors_total", 0)
+                errors = int(errors_raw) if errors_raw else 0
                 # Tool feeds only: never-called past warmup → degraded.
                 if (
                     name.startswith("tool.")
-                    and cycles == 0
-                    and errors == 0
+                    and cycles == errors == 0
                     and startup_age > config.health_warmup_seconds
                 ):
                     any_tool_never_called = True

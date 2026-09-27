@@ -15,9 +15,8 @@ def main() -> None:
         config_class=CmuxMCPConfig,
         name="cmux-mcp",
         _description="MCP server for cmux terminal automation (macOS only).",
-    )
-    app = factory.create_app()
-    app()
+    ).create_app()
+    factory()
 
 
 if __name__ == "__main__":

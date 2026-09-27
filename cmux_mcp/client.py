@@ -445,7 +445,7 @@ class CmuxCliTransport:
                 return args[i + 1]
         return None
 
-    async def _surface_lock_for(self, surface_id: str) -> tuple[asyncio.Lock, str]:
+    async def _surface_lock_for(self, surface_id: str) -> tuple[asyncio.Lock, tuple[str, int]]:
         """Return (lock, release_token). Caller MUST call _release_surface_lock(token)
         in a finally block to drop the refcount (and the lock itself when zero).
 
@@ -463,27 +463,24 @@ class CmuxCliTransport:
                 self._surface_locks[surface_id] = lock
             return lock, (surface_id, refcount)
 
-    def _release_surface_lock(self, token: tuple[str, int]) -> None:
+    async def _release_surface_lock(self, token: tuple[str, int]) -> None:
         """Decrement refcount; drop the asyncio.Lock entry when zero.
 
-        Not async — no I/O. Caller must hold no _lock_lock while calling
-        (or re-acquire it; release path runs outside the locked region).
+        Caller must hold no _lock_lock while calling (the release path
+        acquires it briefly; safe to call from outside the locked region).
         """
         surface_id, observed_refcount = token
 
-        async def _drop() -> None:
-            async with self._lock_lock:
-                current = self._surface_lock_refs.get(surface_id, 0)
-                if current <= 1:
-                    self._surface_locks.pop(surface_id, None)
-                    self._surface_lock_refs.pop(surface_id, None)
-                elif current != observed_refcount:
-                    # Another caller added refs in between; don't drop theirs.
-                    pass
-                else:
-                    self._surface_lock_refs[surface_id] = current - 1
-
-        return _drop()
+        async with self._lock_lock:
+            current = self._surface_lock_refs.get(surface_id, 0)
+            if current <= 1:
+                self._surface_locks.pop(surface_id, None)
+                self._surface_lock_refs.pop(surface_id, None)
+            elif current != observed_refcount:
+                # Another caller added refs in between; don't drop theirs.
+                pass
+            else:
+                self._surface_lock_refs[surface_id] = current - 1
 
     async def _invoke(self, full_args: list[str], timeout: float | None) -> CliResult:
         proc = await asyncio.create_subprocess_exec(

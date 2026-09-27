@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, cast
 
 from fastmcp.exceptions import ToolError
 
+from cmux_mcp.client import CliResult
 from cmux_mcp.models import (
     BrowserClickInput,
     BrowserClickOutput,
@@ -384,14 +385,14 @@ def register_browser_tools(
         messages: list[ConsoleMessage] = []
         errors: list[BrowserError] = []
         partial_failure = False
-        failed_subcalls: list[str] = []
+        failed_subcalls: list[Literal["console_list", "errors_list"]] = []
         console_result, errors_result = results
         if isinstance(console_result, Exception):
             partial_failure = True
             failed_subcalls.append("console_list")
         else:
             try:
-                raw = json.loads(console_result.stdout.decode("utf-8"))
+                raw = json.loads(cast(CliResult, console_result).stdout.decode("utf-8"))
                 messages = [ConsoleMessage(**m) for m in raw]
             except ValueError, TypeError:
                 # JSONDecodeError + pydantic ValidationError (subclasses of
@@ -403,7 +404,7 @@ def register_browser_tools(
             failed_subcalls.append("errors_list")
         else:
             try:
-                raw = json.loads(errors_result.stdout.decode("utf-8"))
+                raw = json.loads(cast(CliResult, errors_result).stdout.decode("utf-8"))
                 errors = [BrowserError(**e) for e in raw]
             except ValueError, TypeError:
                 # JSONDecodeError + pydantic ValidationError (subclasses of

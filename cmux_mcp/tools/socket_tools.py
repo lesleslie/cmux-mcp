@@ -24,6 +24,7 @@ from fastmcp.exceptions import ToolError
 
 from cmux_mcp.models import (
     IdentifyOutput,
+    KeyName,
     ListNotificationsOutput,
     ListWorkspacesOutput,
     Notification,
@@ -114,14 +115,13 @@ def register_socket_tools(
                 pane_data = await socket.request(
                     "pane.surfaces", {"workspace_id": ws_id}
                 )
-                panes: list[Pane] = []
-                for pane in pane_data.get("panes", []):
-                    panes.append(
-                        Pane(
-                            id=pane["id"],
-                            surfaces=[Surface(**s) for s in pane.get("surfaces", [])],
-                        )
+                panes: list[Pane] = [
+                    Pane(
+                        id=pane["id"],
+                        surfaces=[Surface(**s) for s in pane.get("surfaces", [])],
                     )
+                    for pane in pane_data.get("panes", [])
+                ]
                 # Workspace-level surfaces attach to the first pane, or fall back to
                 # a synthetic root pane if the workspace has no panes yet.
                 workspace_surfaces = [
@@ -210,7 +210,7 @@ def register_socket_tools(
     async def cmux_send_keys(
         surface_id: str,
         text: str | None = None,
-        key: str | None = None,
+        key: KeyName | None = None,
     ) -> SendKeysOutput:
         # Pydantic validation enforces exclusive-or at the model boundary.
         validated = SendKeysInput(surface_id=surface_id, text=text, key=key)

@@ -129,43 +129,46 @@ class BrowserConsoleResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# Canonical key name literals — reused by cmux_send_keys's `key` parameter
+# so the tool's signature stays in sync with SendKeysInput.key's allowed
+# values. Single source of truth per spec §"Tool input models".
+KeyName = Literal[
+    "enter",
+    "tab",
+    "escape",
+    "backspace",
+    "delete",
+    "up",
+    "down",
+    "left",
+    "right",
+    "home",
+    "end",
+    "pageup",
+    "pagedown",
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "f10",
+    "f11",
+    "f12",
+    "space",
+    "return",
+]
+
+
 class SendKeysInput(BaseModel):
     """`cmux_send_keys` input — exactly one of `text` or `key`."""
 
     surface_id: Annotated[str, Field(pattern=SURFACE_ID_PATTERN)]
     text: str | None = None
-    key: (
-        Literal[
-            "enter",
-            "tab",
-            "escape",
-            "backspace",
-            "delete",
-            "up",
-            "down",
-            "left",
-            "right",
-            "home",
-            "end",
-            "pageup",
-            "pagedown",
-            "f1",
-            "f2",
-            "f3",
-            "f4",
-            "f5",
-            "f6",
-            "f7",
-            "f8",
-            "f9",
-            "f10",
-            "f11",
-            "f12",
-            "space",
-            "return",
-        ]
-        | None
-    ) = None
+    key: KeyName | None = None
 
     @model_validator(mode="after")
     def _exactly_one_of_text_or_key(self) -> SendKeysInput:
@@ -335,6 +338,7 @@ __all__ = [
     "ConsoleMessage",
     "IdentifyOutput",
     "JsonValue",
+    "KeyName",
     "ListNotificationsOutput",
     "ListWorkspacesOutput",
     "Notification",
