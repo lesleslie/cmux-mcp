@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from fastmcp import FastMCP
+from mcp_common.health.feed import StatusValue
 from mcp_common.server import BaseOneiricServerMixin
 from starlette.responses import JSONResponse
 
@@ -226,7 +227,11 @@ class CmuxMCPServer(BaseOneiricServerMixin):
 
             degraded = any_degraded or any_tool_never_called
             body = {
-                "status": "degraded" if degraded else "ok",
+                "status": (
+                    StatusValue.DEGRADED.value
+                    if degraded
+                    else StatusValue.HEALTHY.value
+                ),
                 "service": "cmux-mcp",
                 "version": __version__,
                 "components": components_payload,
