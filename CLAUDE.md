@@ -88,8 +88,7 @@ project-level conventions:
   exception hierarchy.
 - `ty` is the type checker; use `# ty: ignore[<code>]`, never bare
   `# type: ignore`. Mass suppressions (>5 per file) are a smell.
-- `BaseOneiricServerMixin.config` is declared as `MCPBaseSettings |
-  MCPServerSettings`; `CmuxMCPServer` redeclares it as `config: CmuxMCPConfig`
+- `BaseOneiricServerMixin.config` is declared as `MCPBaseSettings | MCPServerSettings`; `CmuxMCPServer` redeclares it as `config: CmuxMCPConfig`
   at class level to satisfy the contract — that ONE annotation cascades
   fixes through every usage site. Don't add inline `# ty: ignore` for the
   config type — fix the class-level annotation instead.

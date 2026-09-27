@@ -5,11 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-09-26
+
+### Added
+
+- plugins: Onboard as www-mcp-servers Claude Code plugin
+
+### Fixed
+
+- cmux-mcp: Align config surface with mcp-common 0.30.1 MCPBaseSettings
+- cmux-mcp: Drop unused httpx/psutil deps (creosote bloat)
+
+### Documentation
+
+- Consolidate Bodai/Vishnu references to bottom section
+- Drop Bodai integration framing and add substrate note
+- Rename 'Bodai Ecosystem Position' section to standard footer name
+- Update FastMCP badge URL to PrefectHQ org (canonical since v3.0 GA)
+
+### Internal
+
+- cmux-mcp: Refresh uv.lock for mcp-common 0.30.1
+- docs: Add CLAUDE.md, AGENTS.md, and QWEN.md
+- Sync uv.lock with 0.2.0 bump
+
 ## [0.2.0] - 2026-09-21
 
 ### Fixed
 
-- browser: Handle CmuxMockTransport missing _config in truncate path
+- browser: Handle CmuxMockTransport missing \_config in truncate path
 - client+server: H7/H9/H10 — counter, JSONDecodeError, PID PermissionError
 - client: H8 — surface-lock refcount + eviction (no more lock leak)
 - client: Subprocess lifecycle on cancellation + real aclose() (C2+C3)

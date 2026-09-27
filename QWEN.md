@@ -30,7 +30,8 @@ Built with:
    `CmuxMCPServer.startup()` MUST call `register_tools(...)` after transport
    and tool-feed init — otherwise `tools/list` returns `{"tools":[]}`.
 
-2. **Transports (`cmux_mcp/client.py`)** — three transport implementations:
+1. **Transports (`cmux_mcp/client.py`)** — three transport implementations:
+
    - `CmuxSocketTransport` — long-lived Unix-socket JSON-RPC client.
      Multiplexed by id; reconnect with exponential backoff + jitter.
    - `CmuxCliTransport` — single-shot subprocess calls. Per-surface
@@ -41,7 +42,7 @@ Built with:
    - `CmuxMockTransport` — in-process canned responses; implements BOTH
      protocol shapes so tool code is identical against real and mock.
 
-3. **Config (`cmux_mcp/config.py`)** — `CmuxMCPConfig(BaseSettings)`
+1. **Config (`cmux_mcp/config.py`)** — `CmuxMCPConfig(BaseSettings)`
    **directly** (NOT `mcp_common.MCPBaseSettings`). Per spec decision log
    row 5: explicit `SettingsConfigDict(env_prefix="CMUX_MCP_")` for
    orthogonality and unit-testability. `populate_by_name=True` is
@@ -49,8 +50,9 @@ Built with:
    back to the platform default. The env var `CMUX_MCP_MOCK=1` (NOT
    `CMUX_MCP_MOCK_MODE`) is honored via `validation_alias`.
 
-4. **Health (`cmux_mcp/health.py`)** — feed components per spec
+1. **Health (`cmux_mcp/health.py`)** — feed components per spec
    §"/health envelope wiring":
+
    - `SocketFeedComponent(transport: CmuxSocketTransport | CmuxMockTransport)`
    - `BrowserCliFeedComponent(transport: CmuxCliTransport | CmuxMockTransport)`
    - `MockTransportComponent`, `ToolFeedComponent` (one per tool)
@@ -59,7 +61,8 @@ Built with:
    - `/health` returns **200 healthy / 503 degraded** (custom route —
      mcp-common's helper always returns 200; the override is intentional).
 
-5. **Tools (`cmux_mcp/tools/`)** — 12 tool registrations across two files:
+1. **Tools (`cmux_mcp/tools/`)** — 12 tool registrations across two files:
+
    - `socket_tools.py` — 5 socket-direct tools (`cmux_list_workspaces`,
      `cmux_list_notifications`, `cmux_identify`, `cmux_send_keys`,
      `cmux_notify`).
@@ -70,10 +73,10 @@ Built with:
      `else:` (mandatory — without it, `/health` reports
      `successes_total=0` forever).
 
-6. **Discovery (`cmux_mcp/cli_discovery.py`)** — auto-detect the cmux CLI
+1. **Discovery (`cmux_mcp/cli_discovery.py`)** — auto-detect the cmux CLI
    binary path on macOS.
 
-7. **Errors (`cmux_mcp/errors.py`)** — exception hierarchy:
+1. **Errors (`cmux_mcp/errors.py`)** — exception hierarchy:
    `CmuxError` (base), `CmuxTransportError`, `CmuxProtocolError`,
    `CmuxTimeoutError`, `RateLimitedError`. `_as_tool_error` wraps any
    `Exception` as `fastmcp.exceptions.ToolError` for the MCP wire.
