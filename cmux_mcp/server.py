@@ -63,7 +63,7 @@ def acquire_pid_file(path: Path) -> None:
             raise RuntimeError(
                 f"PID file {path} is held by live process {existing_pid}"
             )
-        except (ProcessLookupError, ValueError, PermissionError):
+        except ProcessLookupError, ValueError, PermissionError:
             # ProcessLookupError: PID dead.
             # ValueError: malformed PID text.
             # PermissionError: PID alive but owned by another user (cannot kill -0).

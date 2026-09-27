@@ -445,7 +445,9 @@ class CmuxCliTransport:
                 return args[i + 1]
         return None
 
-    async def _surface_lock_for(self, surface_id: str) -> tuple[asyncio.Lock, tuple[str, int]]:
+    async def _surface_lock_for(
+        self, surface_id: str
+    ) -> tuple[asyncio.Lock, tuple[str, int]]:
         """Return (lock, release_token). Caller MUST call _release_surface_lock(token)
         in a finally block to drop the refcount (and the lock itself when zero).
 

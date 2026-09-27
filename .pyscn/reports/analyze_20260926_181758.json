@@ -1,80 +1,5 @@
 {
   "complexity": {
-    "Functions": [
-      {
-        "Name": "_candidate_paths",
-        "FilePath": "cmux_mcp/cli_discovery.py",
-        "StartLine": 29,
-        "StartColumn": 0,
-        "EndLine": 64,
-        "Metrics": {
-          "Complexity": 7,
-          "Nodes": 15,
-          "Edges": 22,
-          "NestingDepth": 3,
-          "IfStatements": 6,
-          "LoopStatements": 2,
-          "ExceptionHandlers": 0,
-          "SwitchCases": 0
-        },
-        "RiskLevel": "low"
-      },
-      {
-        "Name": "acquire_pid_file",
-        "FilePath": "cmux_mcp/server.py",
-        "StartLine": 39,
-        "StartColumn": 0,
-        "EndLine": 73,
-        "Metrics": {
-          "Complexity": 7,
-          "Nodes": 14,
-          "Edges": 20,
-          "NestingDepth": 4,
-          "IfStatements": 1,
-          "LoopStatements": 0,
-          "ExceptionHandlers": 5,
-          "SwitchCases": 0
-        },
-        "RiskLevel": "low"
-      },
-      {
-        "Name": "discover_cmux_cli",
-        "FilePath": "cmux_mcp/cli_discovery.py",
-        "StartLine": 67,
-        "StartColumn": 0,
-        "EndLine": 95,
-        "Metrics": {
-          "Complexity": 6,
-          "Nodes": 10,
-          "Edges": 15,
-          "NestingDepth": 2,
-          "IfStatements": 4,
-          "LoopStatements": 1,
-          "ExceptionHandlers": 1,
-          "SwitchCases": 0
-        },
-        "RiskLevel": "low"
-      }
-    ],
-    "Summary": {
-      "TotalFunctions": 3,
-      "AverageComplexity": 6.666666666666667,
-      "MaxComplexity": 7,
-      "MinComplexity": 6,
-      "FilesAnalyzed": 14,
-      "LowRiskFunctions": 3,
-      "MediumRiskFunctions": 0,
-      "HighRiskFunctions": 0,
-      "ComplexityDistribution": {
-        "6-10": 3
-      }
-    },
-    "Warnings": null,
-    "Errors": [
-      "[cmux_mcp/client.py] Parse error: syntax errors found in source code"
-    ],
-    "GeneratedAt": "2026-09-26T18:17:58-07:00",
-    "Version": "1.5.0",
     "Config": {
       "exclude_patterns": [
         "test_*.py",
@@ -91,30 +16,84 @@
       "recursive": false,
       "show_details": false,
       "sort_by": "complexity"
-    }
-  },
-  "dead_code": {
-    "files": null,
-    "summary": {
-      "total_files": 14,
-      "total_functions": 0,
-      "total_findings": 0,
-      "files_with_dead_code": 0,
-      "functions_with_dead_code": 0,
-      "critical_findings": 0,
-      "warning_findings": 0,
-      "info_findings": 0,
-      "findings_by_reason": {},
-      "total_blocks": 0,
-      "dead_blocks": 0,
-      "overall_dead_ratio": 0
     },
-    "warnings": null,
-    "errors": [
+    "Errors": [
       "[cmux_mcp/client.py] Parse error: syntax errors found in source code"
     ],
-    "generated_at": "2026-09-26T18:17:58-07:00",
-    "version": "1.5.0",
+    "Functions": [
+      {
+        "EndLine": 64,
+        "FilePath": "cmux_mcp/cli_discovery.py",
+        "Metrics": {
+          "Complexity": 7,
+          "Edges": 22,
+          "ExceptionHandlers": 0,
+          "IfStatements": 6,
+          "LoopStatements": 2,
+          "NestingDepth": 3,
+          "Nodes": 15,
+          "SwitchCases": 0
+        },
+        "Name": "_candidate_paths",
+        "RiskLevel": "low",
+        "StartColumn": 0,
+        "StartLine": 29
+      },
+      {
+        "EndLine": 73,
+        "FilePath": "cmux_mcp/server.py",
+        "Metrics": {
+          "Complexity": 7,
+          "Edges": 20,
+          "ExceptionHandlers": 5,
+          "IfStatements": 1,
+          "LoopStatements": 0,
+          "NestingDepth": 4,
+          "Nodes": 14,
+          "SwitchCases": 0
+        },
+        "Name": "acquire_pid_file",
+        "RiskLevel": "low",
+        "StartColumn": 0,
+        "StartLine": 39
+      },
+      {
+        "EndLine": 95,
+        "FilePath": "cmux_mcp/cli_discovery.py",
+        "Metrics": {
+          "Complexity": 6,
+          "Edges": 15,
+          "ExceptionHandlers": 1,
+          "IfStatements": 4,
+          "LoopStatements": 1,
+          "NestingDepth": 2,
+          "Nodes": 10,
+          "SwitchCases": 0
+        },
+        "Name": "discover_cmux_cli",
+        "RiskLevel": "low",
+        "StartColumn": 0,
+        "StartLine": 67
+      }
+    ],
+    "GeneratedAt": "2026-09-26T18:17:58-07:00",
+    "Summary": {
+      "AverageComplexity": 6.666666666666667,
+      "ComplexityDistribution": {
+        "6-10": 3
+      },
+      "FilesAnalyzed": 14,
+      "HighRiskFunctions": 0,
+      "LowRiskFunctions": 3,
+      "MaxComplexity": 7,
+      "MediumRiskFunctions": 0,
+      "MinComplexity": 6,
+      "TotalFunctions": 3
+    },
+    "Version": "1.5.0",
+    "Warnings": null
+  },
+  "dead_code": {
     "config": {
       "context_lines": 3,
       "detect_after_break": true,
@@ -133,48 +112,69 @@
       "min_severity": "warning",
       "show_context": false,
       "sort_by": "severity"
-    }
+    },
+    "errors": [
+      "[cmux_mcp/client.py] Parse error: syntax errors found in source code"
+    ],
+    "files": null,
+    "generated_at": "2026-09-26T18:17:58-07:00",
+    "summary": {
+      "critical_findings": 0,
+      "dead_blocks": 0,
+      "files_with_dead_code": 0,
+      "findings_by_reason": {},
+      "functions_with_dead_code": 0,
+      "info_findings": 0,
+      "overall_dead_ratio": 0,
+      "total_blocks": 0,
+      "total_files": 14,
+      "total_findings": 0,
+      "total_functions": 0,
+      "warning_findings": 0
+    },
+    "version": "1.5.0",
+    "warnings": null
   },
-  "summary": {
-    "total_files": 14,
-    "analyzed_files": 14,
-    "skipped_files": 0,
-    "complexity_enabled": true,
-    "dead_code_enabled": true,
-    "clone_enabled": false,
-    "cbo_enabled": false,
-    "deps_enabled": false,
-    "arch_enabled": false,
-    "deps_total_modules": 0,
-    "deps_modules_in_cycles": 0,
-    "deps_max_depth": 0,
-    "deps_main_sequence_deviation": 0,
-    "arch_compliance": 0,
-    "total_functions": 3,
-    "average_complexity": 6.666666666666667,
-    "high_complexity_count": 0,
-    "dead_code_count": 0,
-    "critical_dead_code": 0,
-    "warning_dead_code": 0,
-    "info_dead_code": 0,
-    "total_clones": 0,
-    "clone_pairs": 0,
-    "clone_groups": 0,
-    "code_duplication_percentage": 0,
-    "cbo_classes": 0,
-    "high_coupling_classes": 0,
-    "medium_coupling_classes": 0,
-    "average_coupling": 0,
-    "health_score": 93,
-    "grade": "A",
-    "complexity_score": 65,
-    "dead_code_score": 100,
-    "duplication_score": 100,
-    "coupling_score": 100,
-    "dependency_score": 100,
-    "architecture_score": 100
-  },
-  "generated_at": "2026-09-26T18:17:58.096544-07:00",
   "duration_ms": 104,
+  "generated_at": "2026-09-26T18:17:58.096544-07:00",
+  "summary": {
+    "analyzed_files": 14,
+    "arch_compliance": 0,
+    "arch_enabled": false,
+    "architecture_score": 100,
+    "average_complexity": 6.666666666666667,
+    "average_coupling": 0,
+    "cbo_classes": 0,
+    "cbo_enabled": false,
+    "clone_enabled": false,
+    "clone_groups": 0,
+    "clone_pairs": 0,
+    "code_duplication_percentage": 0,
+    "complexity_enabled": true,
+    "complexity_score": 65,
+    "coupling_score": 100,
+    "critical_dead_code": 0,
+    "dead_code_count": 0,
+    "dead_code_enabled": true,
+    "dead_code_score": 100,
+    "dependency_score": 100,
+    "deps_enabled": false,
+    "deps_main_sequence_deviation": 0,
+    "deps_max_depth": 0,
+    "deps_modules_in_cycles": 0,
+    "deps_total_modules": 0,
+    "duplication_score": 100,
+    "grade": "A",
+    "health_score": 93,
+    "high_complexity_count": 0,
+    "high_coupling_classes": 0,
+    "info_dead_code": 0,
+    "medium_coupling_classes": 0,
+    "skipped_files": 0,
+    "total_clones": 0,
+    "total_files": 14,
+    "total_functions": 3,
+    "warning_dead_code": 0
+  },
   "version": "1.5.0"
 }
